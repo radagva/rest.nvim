@@ -51,6 +51,33 @@ require("rest").setup({
 })
 ```
 
+## Highlighting
+
+The response UI exposes these highlight groups. All are defined with
+`default = true`, so your colorscheme can override them (e.g. from its
+`on_highlights`):
+
+| Group | Applies to | Default |
+| --- | --- | --- |
+| `RestStatusCodeInformation` | `1xx` status code | white |
+| `RestStatusCodeSuccess` | `2xx` status code | green |
+| `RestStatusCodeRedirect` | `3xx` status code | amber |
+| `RestStatusCodeError` | `4xx` status code | red |
+| `RestStatusCodeServerError` | `5xx` status code | black on red |
+| `RestHeadingsAttributes` | header names | links to `@function.method` |
+| `RestHeadingsValues` | header values | links to `Comment` |
+
+```lua
+on_highlights = function(hl, colors)
+  hl.RestStatusCodeSuccess = { fg = colors.green }
+  hl.RestStatusCodeServerError = { fg = colors.bg, bg = colors.red }
+  hl.RestHeadingsValues = { fg = colors.fg_dim }
+end
+```
+
+The rest of the status line (`HTTP/1.1`, reason phrase) stays plain `Normal`;
+the response body is handled by treesitter for its content type.
+
 ## Installation
 
 Not yet published. For local development, add this directory to

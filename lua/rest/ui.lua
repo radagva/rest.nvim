@@ -6,15 +6,39 @@ M._buf = nil
 M._ns = nil
 
 local function status_hl(status)
-  if status >= 200 and status < 300 then
-    return "MoreMsg"
-  elseif status >= 300 and status < 400 then
-    return "WarningMsg"
+  if status >= 500 then
+    return "RestStatusCodeServerError"
   elseif status >= 400 then
-    return "ErrorMsg"
+    return "RestStatusCodeError"
+  elseif status >= 300 then
+    return "RestStatusCodeRedirect"
+  elseif status >= 200 then
+    return "RestStatusCodeSuccess"
   end
-  return "Comment"
+  return "RestStatusCodeInformation"
 end
+
+local HL_GROUPS = {
+  RestStatusCodeInformation = { fg = "#ffffff", default = true },
+  RestStatusCodeSuccess = { fg = "#00d700", default = true },
+  RestStatusCodeRedirect = { fg = "#ffaf00", default = true },
+  RestStatusCodeError = { fg = "#ff0000", default = true },
+  RestStatusCodeServerError = { fg = "#000000", bg = "#ff0000", default = true },
+  RestHeadingsAttributes = { link = "@function.method", default = true },
+  RestHeadingsValues = { link = "Comment", default = true },
+}
+
+local function define_highlights()
+  for name, spec in pairs(HL_GROUPS) do
+    vim.api.nvim_set_hl(0, name, spec)
+  end
+end
+
+define_highlights()
+vim.api.nvim_create_autocmd("ColorScheme", {
+  group = vim.api.nvim_create_augroup("RestNvimHighlights", { clear = true }),
+  callback = define_highlights,
+})
 
 local function body_lines(result, opts)
   local jq_path = opts.jq_path
@@ -36,10 +60,12 @@ local function body_lines(result, opts)
   return lines
 end
 
+local function status_line(result)
+  return ("HTTP/%s %d %s"):format(result.version, result.status, result.reason)
+end
+
 local function response_lines(result, opts)
-  local lines = {
-    ("HTTP/%s %d %s"):format(result.version, result.status, result.reason),
-  }
+  local lines = { status_line(result) }
   for _, header in ipairs(result.headers) do
     lines[#lines + 1] = header.name .. ": " .. header.value
   end
@@ -81,15 +107,44 @@ end
 local function overlay(buf, result)
   vim.api.nvim_buf_clear_namespace(buf, M._ns, 0, -1)
   local prio = vim.hl.priorities.user
-  vim.api.nvim_buf_set_extmark(buf, M._ns, 0, 0, {
-    hl_group = status_hl(result.status),
-    hl_eol = true,
-    priority = prio,
-  })
-  for i = 1, #result.headers do
-    vim.api.nvim_buf_set_extmark(buf, M._ns, i, 0, {
-      hl_group = "Comment",
+
+  local line = status_line(result)
+  local code = tostring(result.status)
+  local code_col = #"HTTP/" + #tostring(result.version) + 1
+  if line:sub(code_col + 1, code_col + #code) == code then
+    vim.api.nvim_buf_set_extmark(buf, M._ns, 0, 0, {
+      hl_group = "Normal",
+      end_col = code_col,
+      priority = prio,
+    })
+    vim.api.nvim_buf_set_extmark(buf, M._ns, 0, code_col, {
+      hl_group = status_hl(result.status),
+      end_col = code_col + #code,
+      priority = prio,
+    })
+    vim.api.nvim_buf_set_extmark(buf, M._ns, 0, code_col + #code, {
+      hl_group = "Normal",
       hl_eol = true,
+      priority = prio,
+    })
+  else
+    vim.api.nvim_buf_set_extmark(buf, M._ns, 0, 0, {
+      hl_group = status_hl(result.status),
+      hl_eol = true,
+      priority = prio,
+    })
+  end
+
+  for i, header in ipairs(result.headers) do
+    local colon = #header.name
+    vim.api.nvim_buf_set_extmark(buf, M._ns, i, 0, {
+      hl_group = "RestHeadingsAttributes",
+      end_col = colon,
+      priority = prio,
+    })
+    vim.api.nvim_buf_set_extmark(buf, M._ns, i, colon + 1, {
+      hl_group = "RestHeadingsValues",
+      end_col = colon + 2 + #header.value,
       priority = prio,
     })
   end
