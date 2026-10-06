@@ -56,14 +56,15 @@ end
 
 ---Parse the header dump written by curl (`-D`).
 ---Handles multiple blocks (redirects): the last status line wins.
+---CR from CRLF line endings is stripped. Line endings are `\r\n` per RFC 9112.
 ---Returns `version, status, reason, headers` (headers: ordered array).
-local function parse_header_dump(text)
+function M.parse_header_dump(text)
   if not text or text == "" then
     return nil
   end
   local lines = {}
   for line in text:gmatch("[^\n]+") do
-    lines[#lines + 1] = line
+    lines[#lines + 1] = (line:gsub("\r$", ""))
   end
   local start
   for i, line in ipairs(lines) do
@@ -138,7 +139,7 @@ function M.send(request, opts, callback)
     vim.schedule(function()
       local header_text = read_file(paths.header_out) or ""
       local body = read_file(paths.body_out) or ""
-      local version, status, reason, headers = parse_header_dump(header_text)
+      local version, status, reason, headers = M.parse_header_dump(header_text)
       headers = headers or {}
       local status_line, time_s = (out.stdout or ""):match("^(%d+)%s+([%d%.]+)")
 
