@@ -1,0 +1,7 @@
+return {
+  default = {
+    ROOT = { "tests" },
+    verbose = true,
+    lpath = "./lua/?.lua;./lua/?/init.lua",
+  },
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+# fake jq for tests: sorts keys by delegating to nothing; just prints input pretty-ish
+# reads file arg ($2 after "."), prints a fixed pretty output
+printf "{\n  \"a\": 1,\n  \"b\": 2\n}\n"
