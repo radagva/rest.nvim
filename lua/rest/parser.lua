@@ -67,6 +67,7 @@ end
 local function parse_chunk(lines, chunk, definitions, requests)
   local i = chunk.first
   local last = chunk.last
+  local tag
 
   while i <= last do
     local line = lines[i]
@@ -78,7 +79,13 @@ local function parse_chunk(lines, chunk, definitions, requests)
         definitions[name] = value
         i = i + 1
       else
-        break
+        local parsed_tag = line:match("^%s*@name%s+([%w_%-]+)%s*$")
+        if parsed_tag then
+          tag = parsed_tag
+          i = i + 1
+        else
+          break
+        end
       end
     end
   end
@@ -122,6 +129,7 @@ local function parse_chunk(lines, chunk, definitions, requests)
 
   requests[#requests + 1] = {
     name = chunk.name,
+    tag = tag,
     method = request.method,
     url = request.url,
     version = request.version,

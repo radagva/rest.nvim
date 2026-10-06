@@ -5,7 +5,7 @@ vim.cmd("runtime plugin/rest.lua")
 local http = table.concat({
   "@host = https://example.com",
   "### fetch home",
-  "GET {{host}}/",
+  "GET $host/",
   "Accept: text/html",
 }, "\n")
 

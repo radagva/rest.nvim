@@ -11,6 +11,8 @@ M.defaults = {
 
 M.options = vim.deepcopy(M.defaults)
 
+local responses = {}
+
 function M.setup(opts)
   M.options = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), opts or {})
 end
@@ -39,7 +41,11 @@ function M.run()
     return
   end
 
-  local resolved, verr = require("rest.variables").resolve_request(request, doc.definitions)
+  local resolved, verr = require("rest.variables").resolve_request(request, doc.definitions, {
+    responses = responses,
+    decode = vim.json.decode,
+    encode = vim.json.encode,
+  })
   if not resolved then
     notify(verr)
     return
@@ -51,6 +57,9 @@ function M.run()
     if not result.ok then
       notify(result.error)
       return
+    end
+    if request.tag then
+      responses[request.tag] = result
     end
     require("rest.ui").open(result, vim.tbl_extend("force", M.options, M.options.ui))
   end)

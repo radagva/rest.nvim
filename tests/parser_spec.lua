@@ -79,6 +79,42 @@ describe("parser", function()
     assert.equals("Bearer {{token}}", doc.requests[1].headers[1].value)
   end)
 
+  it("tags requests with @name in the preamble", function()
+    local text = table.concat({
+      "@host = https://api.example.com",
+      "@name signin",
+      "POST {{host}}/login",
+      "",
+      "### other",
+      "@name profile",
+      "GET {{host}}/me",
+    }, "\n")
+
+    local doc = assert(parser.parse(text))
+    assert.equals(2, #doc.requests)
+    assert.equals("signin", doc.requests[1].tag)
+    assert.equals("profile", doc.requests[2].tag)
+    assert.same({ host = "https://api.example.com" }, doc.definitions)
+  end)
+
+  it("keeps @name = value a variable, not a tag", function()
+    local doc = assert(parser.parse("@name = Alice\nGET https://example.com"))
+    assert.same({ name = "Alice" }, doc.definitions)
+    assert.is_nil(doc.requests[1].tag)
+  end)
+
+  it("leaves tag nil when @name is absent", function()
+    local doc = assert(parser.parse("### login\nGET https://example.com"))
+    assert.is_nil(doc.requests[1].tag)
+  end)
+
+  it("rejects @name without a tag", function()
+    local doc, err = parser.parse("@name\nGET https://example.com")
+    assert.is_nil(doc)
+    assert.matches("line 1", err)
+    assert.matches("expected request line", err)
+  end)
+
   it("keeps @var-looking lines inside bodies as body content", function()
     local text = table.concat({
       "POST https://example.com/x",
