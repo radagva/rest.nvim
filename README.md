@@ -4,6 +4,8 @@ A REST client for Neovim. Reads `.http` files, executes the request under the
 cursor, and shows the response (written in pure Lua with zero Lua/library
 dependencies).
 
+![screenshot](assets/screenshot.png)
+
 ## Requirements
 
 - Neovim **0.12+**
@@ -59,22 +61,22 @@ require("rest").setup({
 })
 ```
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `base_url` | `string?` | `nil` | Prefix for relative request URLs (e.g. `https://api.example.com`). |
-| `timeout_s` | `number` | `30` | Request timeout, passed to `curl --max-time`. |
-| `follow_redirects` | `boolean` | `false` | Follow redirects (`curl -L`). |
-| `verify_tls` | `boolean` | `true` | Verify TLS certificates; `false` passes `curl -k`. |
-| `jq_path` | `string?` | `nil` | Explicit `jq` binary; by default jq is auto-detected on `$PATH`. |
-| `ui.split` | `string` | `"vertical"` | Response split direction: `"vertical"` or `"horizontal"`. |
-| `list.picker` | `string` | `"auto"` | `:RestList` backend: `"auto"`, `"snacks"`, `"telescope"`, `"fzf"` or `"select"` (see [Listing requests](#listing-requests)). |
-| `list.dirs` | `string[]` | `{ "." }` | Directories scanned recursively by `:RestList`; relative paths resolve against the current working directory. |
+| Option             | Type       | Default      | Description                                                                                                                  |
+| ------------------ | ---------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`         | `string?`  | `nil`        | Prefix for relative request URLs (e.g. `https://api.example.com`).                                                           |
+| `timeout_s`        | `number`   | `30`         | Request timeout, passed to `curl --max-time`.                                                                                |
+| `follow_redirects` | `boolean`  | `false`      | Follow redirects (`curl -L`).                                                                                                |
+| `verify_tls`       | `boolean`  | `true`       | Verify TLS certificates; `false` passes `curl -k`.                                                                           |
+| `jq_path`          | `string?`  | `nil`        | Explicit `jq` binary; by default jq is auto-detected on `$PATH`.                                                             |
+| `ui.split`         | `string`   | `"vertical"` | Response split direction: `"vertical"` or `"horizontal"`.                                                                    |
+| `list.picker`      | `string`   | `"auto"`     | `:RestList` backend: `"auto"`, `"snacks"`, `"telescope"`, `"fzf"` or `"select"` (see [Listing requests](#listing-requests)). |
+| `list.dirs`        | `string[]` | `{ "." }`    | Directories scanned recursively by `:RestList`; relative paths resolve against the current working directory.                |
 
 ## Usage
 
-| Command | Description |
-| --- | --- |
-| `:RestRun` | Run the `.http` request under the cursor |
+| Command     | Description                                                            |
+| ----------- | ---------------------------------------------------------------------- |
+| `:RestRun`  | Run the `.http` request under the cursor                               |
 | `:RestList` | Pick a request from all `.http` files under `list.dirs` and jump to it |
 
 Open a `.http` file and run the request under the cursor:
@@ -151,16 +153,16 @@ GET $host/me
 Authorization: Bearer $signin.response.body.accessToken
 ```
 
-| Path | Value |
-| --- | --- |
-| `$tag.response.body` | raw response body |
-| `$tag.response.body.field` | JSON field (`.` for nesting; keys are matched case-insensitively; objects/arrays are inlined as compact JSON) |
-| `$tag.response.body[0].field` | array element (**0-based**; `.0` also works; `[0][1]` chains) |
-| `$tag.response.headers.Name` | header value (name is case-insensitive) |
-| `$tag.response.status` | status code |
-| `$tag.response.version` | HTTP version |
-| `$tag.response.reason` | reason phrase |
-| `$tag.response.url` | final URL |
+| Path                          | Value                                                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `$tag.response.body`          | raw response body                                                                                             |
+| `$tag.response.body.field`    | JSON field (`.` for nesting; keys are matched case-insensitively; objects/arrays are inlined as compact JSON) |
+| `$tag.response.body[0].field` | array element (**0-based**; `.0` also works; `[0][1]` chains)                                                 |
+| `$tag.response.headers.Name`  | header value (name is case-insensitive)                                                                       |
+| `$tag.response.status`        | status code                                                                                                   |
+| `$tag.response.version`       | HTTP version                                                                                                  |
+| `$tag.response.reason`        | reason phrase                                                                                                 |
+| `$tag.response.url`           | final URL                                                                                                     |
 
 Responses are kept in memory for the current session: the tagged request must
 have been run before (otherwise resolution fails with
@@ -173,25 +175,25 @@ The response UI exposes these highlight groups. All are defined with
 `default = true`, so your colorscheme can override them (e.g. from its
 `on_highlights`):
 
-| Group | Applies to | Default |
-| --- | --- | --- |
-| `RestStatusCodeInformation` | `1xx` status code | white |
-| `RestStatusCodeSuccess` | `2xx` status code | green |
-| `RestStatusCodeRedirect` | `3xx` status code | amber |
-| `RestStatusCodeError` | `4xx` status code | red |
-| `RestStatusCodeServerError` | `5xx` status code | black on red |
-| `RestHeadingsAttributes` | header names | links to `@function.method` |
-| `RestHeadingsValues` | header values | links to `Comment` |
-| `RestMethod` | other methods in `:RestList` | links to `@function.method` |
-| `RestMethodGet` | `GET` in `:RestList` | green |
-| `RestMethodPost` | `POST` in `:RestList` | amber |
-| `RestMethodPut` | `PUT` in `:RestList` | light blue |
-| `RestMethodPatch` | `PATCH` in `:RestList` | magenta |
-| `RestMethodDelete` | `DELETE` in `:RestList` | red |
-| `RestMethodHead` | `HEAD` in `:RestList` | pale blue |
-| `RestMethodOptions` | `OPTIONS` in `:RestList` | yellow |
-| `RestMethodTrace` | `TRACE` in `:RestList` | grey |
-| `RestMethodConnect` | `CONNECT` in `:RestList` | grey |
+| Group                       | Applies to                   | Default                     |
+| --------------------------- | ---------------------------- | --------------------------- |
+| `RestStatusCodeInformation` | `1xx` status code            | white                       |
+| `RestStatusCodeSuccess`     | `2xx` status code            | green                       |
+| `RestStatusCodeRedirect`    | `3xx` status code            | amber                       |
+| `RestStatusCodeError`       | `4xx` status code            | red                         |
+| `RestStatusCodeServerError` | `5xx` status code            | black on red                |
+| `RestHeadingsAttributes`    | header names                 | links to `@function.method` |
+| `RestHeadingsValues`        | header values                | links to `Comment`          |
+| `RestMethod`                | other methods in `:RestList` | links to `@function.method` |
+| `RestMethodGet`             | `GET` in `:RestList`         | green                       |
+| `RestMethodPost`            | `POST` in `:RestList`        | amber                       |
+| `RestMethodPut`             | `PUT` in `:RestList`         | light blue                  |
+| `RestMethodPatch`           | `PATCH` in `:RestList`       | magenta                     |
+| `RestMethodDelete`          | `DELETE` in `:RestList`      | red                         |
+| `RestMethodHead`            | `HEAD` in `:RestList`        | pale blue                   |
+| `RestMethodOptions`         | `OPTIONS` in `:RestList`     | yellow                      |
+| `RestMethodTrace`           | `TRACE` in `:RestList`       | grey                        |
+| `RestMethodConnect`         | `CONNECT` in `:RestList`     | grey                        |
 
 ```lua
 on_highlights = function(hl, colors)
