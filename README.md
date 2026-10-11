@@ -4,7 +4,7 @@ A REST client for Neovim. Reads `.http` files, executes the request under the
 cursor, and shows the response (written in pure Lua with zero Lua/library
 dependencies).
 
-![screenshot](assets/screenshot.png)
+![response](assets/response.png)
 
 ## Requirements
 
