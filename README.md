@@ -100,6 +100,8 @@ split (`rest://response`). The body is syntax-highlighted by content type
 
 ## Listing requests
 
+![requests list](assets/requests-list.png)
+
 `:RestList` scans every `*.http` file under the configured directories
 (recursive, skipping `.git/` and `node_modules/`) and shows all of their
 endpoints in a picker:
