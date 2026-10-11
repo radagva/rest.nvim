@@ -38,11 +38,12 @@ end
 ---parsed document (as returned by `rest.parser`). `width` maps a string to its
 ---display width and defaults to byte length.
 ---
----Every entry is `{ method, label, file, abs, line, method_hl, display,
----chunks }`, where `label` is the request's `### name`, falling back to its
----`@name <tag>` and then to its URL, and `display` is the picker row:
----`METHOD<sp>LABEL<sp>FILE`, with the method and label columns padded so rows
----line up. `chunks` splits the row into `{ text, hl_group? }` pieces (the
+---Every entry is `{ method, label, file, abs, line, end_line, method_hl,
+---display, chunks }`, where `label` is the request's `### name`, falling back
+---to its `@name <tag>` and then to its URL, `line`/`end_line` bound the
+---request's source block (used by picker previews) and `display` is the picker
+---row: `METHOD<sp>LABEL<sp>FILE`, with the method and label columns padded so
+---rows line up. `chunks` splits the row into `{ text, hl_group? }` pieces (the
 ---method column carries `method_hl`) for pickers that highlight items.
 function M.entries(files, width)
   local display_width = width or function(text)
@@ -60,6 +61,7 @@ function M.entries(files, width)
         file = f.file,
         abs = f.abs,
         line = r.start_line,
+        end_line = r.end_line,
         method_hl = M.method_hl(r.method),
       }
       method_width = math.max(method_width, display_width(r.method))
@@ -107,18 +109,66 @@ local function find_http_files(dirs)
   return paths
 end
 
----Read a file, preferring a loaded buffer so unsaved edits show up.
-local function read_file(abs)
+---Read a file's lines, preferring a loaded buffer so unsaved edits show up.
+local function read_lines(abs)
   for _, info in ipairs(vim.fn.getbufinfo({ loaded = 1 })) do
-    if info.name ~= "" and vim.fs.normalize(info.name) == abs then
-      return table.concat(vim.api.nvim_buf_get_lines(info.bufnr, 0, -1, false), "\n")
+    local name = vim.api.nvim_buf_get_name(info.bufnr)
+    if name ~= "" and vim.fs.normalize(name) == abs then
+      return vim.api.nvim_buf_get_lines(info.bufnr, 0, -1, false)
     end
   end
   local ok, lines = pcall(vim.fn.readfile, abs)
   if not ok then
     return nil
   end
-  return table.concat(lines, "\n")
+  return lines
+end
+
+---Read a file as one string, preferring a loaded buffer so unsaved edits show
+---up.
+local function read_file(abs)
+  local lines = read_lines(abs)
+  return lines and table.concat(lines, "\n")
+end
+
+---The source lines of `entry`'s request block, from its request line to
+---`end_line` (clamped to the file's current contents), for picker previews.
+---Returns `{}` when the file cannot be read or the request line is gone.
+function M.request_lines(entry)
+  local lines = read_lines(entry.abs)
+  if not lines then
+    return {}
+  end
+  local from = entry.line
+  if from < 1 or from > #lines then
+    return {}
+  end
+  local to = math.min(entry.end_line or from, #lines)
+  if to < from then
+    to = from
+  end
+  local out = {}
+  for i = from, to do
+    out[#out + 1] = lines[i]
+  end
+  return out
+end
+
+---Filetype (and treesitter language) used for request previews.
+local PREVIEW_FT = "http"
+
+---Preview callback for pickers that render inside Neovim (snacks and, when it
+---replaces `vim.ui.select`, snacks' ui.select): show the selected request's
+---source lines with treesitter highlighting when the `http` parser is
+---available.
+local function preview_request(ctx)
+  local entry = ctx.item and (ctx.item.entry or ctx.item.item)
+  if not entry or not ctx.preview then
+    return
+  end
+  ctx.preview:set_title(("%s:%d"):format(entry.file, entry.line))
+  ctx.preview:set_lines(M.request_lines(entry))
+  ctx.preview:highlight({ ft = PREVIEW_FT, lang = PREVIEW_FT })
 end
 
 ---Parse every discovered file into `{ file, abs, requests }` entries.
@@ -149,6 +199,7 @@ local function collect(dirs)
             method = r.method,
             url = url,
             start_line = r.start_line,
+            end_line = r.end_line,
           }
         end
         files[#files + 1] = {
@@ -212,7 +263,7 @@ local function pick_snacks(entries, on_select)
     format = function(item)
       return item.entry.chunks
     end,
-    preview = "none",
+    preview = preview_request,
     confirm = function(picker, item)
       picker:close()
       if item and item.entry then
@@ -227,10 +278,25 @@ local function pick_telescope(entries, on_select)
   local finders = require("telescope.finders")
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
+  local previewers = require("telescope.previewers")
 
   pickers
     .new({}, {
       prompt_title = "REST requests",
+      previewer = previewers.new_buffer_previewer({
+        title = "REST request",
+        define_preview = function(self, entry)
+          local req = entry.value
+          if not req then
+            return
+          end
+          local buf = self.state.bufnr
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, M.request_lines(req))
+          vim.bo[buf].modifiable = false
+          vim.bo[buf].filetype = PREVIEW_FT
+          require("telescope.previewers.utils").highlighter(buf, PREVIEW_FT)
+        end,
+      }),
       finder = finders.new_table({
         results = entries,
         entry_maker = function(entry)
@@ -243,6 +309,7 @@ local function pick_telescope(entries, on_select)
             ordinal = entry.display,
             filename = entry.abs,
             lnum = entry.line,
+            preview_title = ("%s:%d"):format(entry.file, entry.line),
           }
         end,
       }),
@@ -309,17 +376,31 @@ local function strip_ansi(text)
 end
 
 local function pick_fzf(entries, on_select)
+  -- Rows carry `abs`, start line, end line and the display row in tab
+  -- separated fields: fzf shows and matches only field 4 (`--with-nth`), and
+  -- the preview command reads the metadata fields.
   local lines, by_line = {}, {}
   for _, entry in ipairs(entries) do
-    lines[#lines + 1] = ansi_line(entry.chunks)
+    lines[#lines + 1] = table.concat({
+      entry.abs,
+      tostring(entry.line),
+      tostring(entry.end_line or entry.line),
+      ansi_line(entry.chunks),
+    }, "\t")
     by_line[entry.display] = by_line[entry.display] or entry
   end
   require("fzf-lua").fzf_exec(lines, {
     prompt = "REST> ",
+    fzf_opts = {
+      ["--delimiter"] = "[\t]",
+      ["--with-nth"] = "4..",
+      ["--preview"] = "sed -n '{2},{3}p' '{1}'",
+    },
     actions = {
       ["default"] = function(selected)
         local text = selected and selected[1]
-        local entry = text and (by_line[text] or by_line[strip_ansi(text)])
+        local display = text and text:match("([^\t]*)$")
+        local entry = display and (by_line[display] or by_line[strip_ansi(display)])
         if entry then
           on_select(entry)
         end
@@ -334,6 +415,9 @@ local function pick_ui_select(entries, on_select)
     format_item = function(entry)
       return entry.display
     end,
+    -- Only used when a picker (e.g. snacks) replaces `vim.ui.select`; vanilla
+    -- `vim.ui.select` ignores it and has no preview.
+    snacks = { preview = preview_request },
   }, function(entry)
     if entry then
       on_select(entry)

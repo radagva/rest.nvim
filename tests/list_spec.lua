@@ -42,6 +42,99 @@ describe("list", function()
     assert.equals(8, entries[3].line)
   end)
 
+  it("keeps the request's last line, including headers and body", function()
+    local entries = entries_for(table.concat({
+      "GET https://example.com/a",
+      "Accept: application/json",
+      "",
+      '{"page": 1}',
+      "",
+      "### with body",
+      "POST https://example.com/b",
+      "Content-Type: application/json",
+      "",
+      "{}",
+    }, "\n"))
+    assert.equals(1, entries[1].line)
+    assert.equals(4, entries[1].end_line)
+    assert.equals(7, entries[2].line)
+    assert.equals(10, entries[2].end_line)
+    -- requests without headers or body end on their request line
+    local bare = entries_for(TEXT)
+    assert.equals(1, bare[1].end_line)
+    assert.equals(4, bare[2].end_line)
+    assert.equals(8, bare[3].end_line)
+  end)
+
+  it("returns the request's source lines for picker previews", function()
+    local path = os.tmpname()
+    local f = assert(io.open(path, "w"))
+    f:write(table.concat({
+      "GET https://example.com/a",
+      "Accept: application/json",
+      "",
+      '{"page": 1}',
+    }, "\n"))
+    f:close()
+
+    local saved = _G.vim
+    _G.vim = {
+      fn = {
+        getbufinfo = function()
+          return {}
+        end,
+        readfile = function(name)
+          local file = io.open(name, "r")
+          if not file then
+            error("E484: Cannot open file")
+          end
+          local lines = {}
+          for line in file:lines() do
+            lines[#lines + 1] = line
+          end
+          file:close()
+          return lines
+        end,
+      },
+      fs = {
+        normalize = function(p)
+          return p
+        end,
+      },
+    }
+
+    local got = {}
+    got.block = list.request_lines({ abs = path, line = 1, end_line = 4 })
+    got.clamped = list.request_lines({ abs = path, line = 4, end_line = 99 })
+    got.gone = list.request_lines({ abs = path, line = 99, end_line = 100 })
+    got.missing = list.request_lines({ abs = path .. ".missing", line = 1, end_line = 1 })
+
+    -- a loaded buffer wins over the file on disk
+    _G.vim.fn.getbufinfo = function()
+      return { { bufnr = 7 } }
+    end
+    _G.vim.api = {
+      nvim_buf_get_name = function()
+        return path
+      end,
+      nvim_buf_get_lines = function()
+        return { "EDITED" }
+      end,
+    }
+    got.buffer = list.request_lines({ abs = path, line = 1, end_line = 4 })
+    _G.vim = saved
+    os.remove(path)
+
+    assert.same(
+      { "GET https://example.com/a", "Accept: application/json", "", '{"page": 1}' },
+      got.block
+    )
+    assert.same({ '{"page": 1}' }, got.clamped)
+    assert.same({}, got.gone)
+    assert.same({}, got.missing)
+    assert.same({ "EDITED" }, got.buffer)
+  end)
+
   it("builds aligned display rows with padded method and label columns", function()
     local entries = entries_for(TEXT)
     assert.equals("GET   https://example.com/health  api.http", entries[1].display)
