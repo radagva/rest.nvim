@@ -32,6 +32,29 @@ Accept: application/json
 split (`rest://response`). The body is syntax-highlighted by content type
 (treesitter when a parser is installed; status and headers stay dimmed).
 
+## Listing requests
+
+`:RestList` scans every `*.http` file under the configured directories
+(recursive, skipping `.git/` and `node_modules/`) and shows all of their
+endpoints in a picker:
+
+```
+GET   list users      api/users.http
+POST  login           auth.http
+GET   https://api.example.com/health  api/health.http
+```
+
+Each row is `METHOD  NAME  FILE`, with the method and name columns padded to
+align. The name is the request's `### name`, falling back to its `@name
+<tag>`, and then to its URL (with `$name` references resolved when possible).
+Picking a row opens that file with the cursor on the request's line, ready
+for `:RestRun`.
+
+The picker backend is configurable (`list.picker`): `"snacks"`,
+`"telescope"`, `"fzf"` (fzf-lua) or `"select"` (`vim.ui.select`). The default,
+`"auto"`, picks the first backend that is installed in that order, falling
+back to `vim.ui.select`.
+
 Supported `.http` features: `###` request separators (with optional names),
 `#`/`//` comments, `@name = value` file variables, `@name <tag>` request tags,
 `$name` substitution in URL/headers/body (concatenates inside quoted strings),
@@ -86,6 +109,10 @@ require("rest").setup({
   verify_tls = true,        -- set false to pass curl -k
   jq_path = nil,            -- explicit jq binary (default: auto-detect)
   ui = { split = "vertical" }, -- or "horizontal"
+  list = {
+    picker = "auto",          -- "auto" | "snacks" | "telescope" | "fzf" | "select"
+    dirs = { "." },           -- directories scanned by :RestList
+  },
 })
 ```
 

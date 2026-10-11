@@ -7,6 +7,7 @@ M.defaults = {
   verify_tls = true,
   jq_path = nil,
   ui = { split = "vertical" },
+  list = { picker = "auto", dirs = { "." } },
 }
 
 M.options = vim.deepcopy(M.defaults)
@@ -19,6 +20,11 @@ end
 
 local function notify(msg, level)
   vim.notify("rest.nvim: " .. msg, level or vim.log.levels.ERROR)
+end
+
+---Pick a request from the `.http` files under `list.dirs` and jump to it.
+function M.list()
+  require("rest.list").open(M.options.list)
 end
 
 local function parse_buffer()
