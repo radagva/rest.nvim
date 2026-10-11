@@ -26,6 +26,17 @@ local HL_GROUPS = {
   RestStatusCodeServerError = { fg = "#000000", bg = "#ff0000", default = true },
   RestHeadingsAttributes = { link = "@function.method", default = true },
   RestHeadingsValues = { link = "Comment", default = true },
+  -- HTTP methods in :RestList (names must match METHOD_HL in rest.list).
+  RestMethod = { link = "@function.method", default = true },
+  RestMethodGet = { fg = "#00d700", default = true },
+  RestMethodPost = { fg = "#ffaf00", default = true },
+  RestMethodPut = { fg = "#5fd7ff", default = true },
+  RestMethodPatch = { fg = "#d75fd7", default = true },
+  RestMethodDelete = { fg = "#ff0000", default = true },
+  RestMethodHead = { fg = "#87afff", default = true },
+  RestMethodOptions = { fg = "#d7d75f", default = true },
+  RestMethodTrace = { fg = "#afafaf", default = true },
+  RestMethodConnect = { fg = "#afafaf", default = true },
 }
 
 local function define_highlights()

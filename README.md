@@ -47,8 +47,8 @@ GET   https://api.example.com/health  api/health.http
 Each row is `METHOD  NAME  FILE`, with the method and name columns padded to
 align. The name is the request's `### name`, falling back to its `@name
 <tag>`, and then to its URL (with `$name` references resolved when possible).
-Picking a row opens that file with the cursor on the request's line, ready
-for `:RestRun`.
+The method is colorized (see [Highlighting](#highlighting)). Picking a row
+opens that file with the cursor on the request's line, ready for `:RestRun`.
 
 The picker backend is configurable (`list.picker`): `"snacks"`,
 `"telescope"`, `"fzf"` (fzf-lua) or `"select"` (`vim.ui.select`). The default,
@@ -131,12 +131,24 @@ The response UI exposes these highlight groups. All are defined with
 | `RestStatusCodeServerError` | `5xx` status code | black on red |
 | `RestHeadingsAttributes` | header names | links to `@function.method` |
 | `RestHeadingsValues` | header values | links to `Comment` |
+| `RestMethod` | other methods in `:RestList` | links to `@function.method` |
+| `RestMethodGet` | `GET` in `:RestList` | green |
+| `RestMethodPost` | `POST` in `:RestList` | amber |
+| `RestMethodPut` | `PUT` in `:RestList` | light blue |
+| `RestMethodPatch` | `PATCH` in `:RestList` | magenta |
+| `RestMethodDelete` | `DELETE` in `:RestList` | red |
+| `RestMethodHead` | `HEAD` in `:RestList` | pale blue |
+| `RestMethodOptions` | `OPTIONS` in `:RestList` | yellow |
+| `RestMethodTrace` | `TRACE` in `:RestList` | grey |
+| `RestMethodConnect` | `CONNECT` in `:RestList` | grey |
 
 ```lua
 on_highlights = function(hl, colors)
   hl.RestStatusCodeSuccess = { fg = colors.green }
   hl.RestStatusCodeServerError = { fg = colors.bg, bg = colors.red }
   hl.RestHeadingsValues = { fg = colors.fg_dim }
+  hl.RestMethodGet = { fg = colors.green, bold = true }
+  hl.RestMethodDelete = { fg = colors.red, bold = true }
 end
 ```
 
