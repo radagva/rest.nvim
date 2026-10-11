@@ -11,7 +11,71 @@ dependencies).
 - `jq` (optional; pretty-prints JSON responses; falls back to a built-in
   renderer when absent)
 
+## Installation
+
+Add the plugin with Neovim's native package manager (`vim.pack`, Neovim
+0.12+):
+
+```lua
+vim.pack.add({ "https://github.com/radagva/rest.nvim" })
+```
+
+With [lazy.nvim](https://github.com/folke/lazy.nvim):
+
+```lua
+{
+  "radagva/rest.nvim",
+  -- optional: with `opts`, lazy.nvim calls require("rest").setup(opts)
+  opts = {},
+}
+```
+
+Or clone the repository anywhere and prepend it to `'runtimepath'`:
+
+```lua
+vim.opt.runtimepath:append("~/path/to/rest.nvim")
+```
+
+There are no Lua dependencies; see [Requirements](#requirements) for `curl`
+and the optional `jq`.
+
+## Configuration
+
+Calling `setup()` is optional (the defaults below apply out of the box).
+Override only what you need:
+
+```lua
+require("rest").setup({
+  base_url = nil,             -- prefix for relative request URLs
+  timeout_s = 30,             -- curl --max-time in seconds
+  follow_redirects = false,   -- pass curl -L
+  verify_tls = true,          -- false to pass curl -k
+  jq_path = nil,              -- jq binary (default: auto-detect on $PATH)
+  ui = { split = "vertical" }, -- response split: "vertical" | "horizontal"
+  list = {
+    picker = "auto",          -- "auto" | "snacks" | "telescope" | "fzf" | "select"
+    dirs = { "." },           -- directories scanned by :RestList
+  },
+})
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `base_url` | `string?` | `nil` | Prefix for relative request URLs (e.g. `https://api.example.com`). |
+| `timeout_s` | `number` | `30` | Request timeout, passed to `curl --max-time`. |
+| `follow_redirects` | `boolean` | `false` | Follow redirects (`curl -L`). |
+| `verify_tls` | `boolean` | `true` | Verify TLS certificates; `false` passes `curl -k`. |
+| `jq_path` | `string?` | `nil` | Explicit `jq` binary; by default jq is auto-detected on `$PATH`. |
+| `ui.split` | `string` | `"vertical"` | Response split direction: `"vertical"` or `"horizontal"`. |
+| `list.picker` | `string` | `"auto"` | `:RestList` backend: `"auto"`, `"snacks"`, `"telescope"`, `"fzf"` or `"select"` (see [Listing requests](#listing-requests)). |
+| `list.dirs` | `string[]` | `{ "." }` | Directories scanned recursively by `:RestList`; relative paths resolve against the current working directory. |
+
 ## Usage
+
+| Command | Description |
+| --- | --- |
+| `:RestRun` | Run the `.http` request under the cursor |
+| `:RestList` | Pick a request from all `.http` files under `list.dirs` and jump to it |
 
 Open a `.http` file and run the request under the cursor:
 
@@ -49,6 +113,12 @@ align. The name is the request's `### name`, falling back to its `@name
 <tag>`, and then to its URL (with `$name` references resolved when possible).
 The method is colorized (see [Highlighting](#highlighting)). Picking a row
 opens that file with the cursor on the request's line, ready for `:RestRun`.
+
+Backends with a preview window (snacks, telescope, fzf-lua) show the selected
+request's source lines: snacks and telescope highlight them with treesitter
+when the `http` parser is installed (falling back to plain syntax
+otherwise), fzf-lua shows plain text in fzf's preview pane, and vanilla
+`vim.ui.select` has no preview.
 
 The picker backend is configurable (`list.picker`): `"snacks"`,
 `"telescope"`, `"fzf"` (fzf-lua) or `"select"` (`vim.ui.select`). The default,
@@ -97,25 +167,6 @@ have been run before (otherwise resolution fails with
 `undefined response '<tag>'`). File definitions win over response refs of the
 same name.
 
-## Setup (optional)
-
-Defaults work out of the box; override as needed:
-
-```lua
-require("rest").setup({
-  base_url = nil,           -- prefix for relative URLs
-  timeout_s = 30,           -- curl --max-time
-  follow_redirects = false, -- curl -L
-  verify_tls = true,        -- set false to pass curl -k
-  jq_path = nil,            -- explicit jq binary (default: auto-detect)
-  ui = { split = "vertical" }, -- or "horizontal"
-  list = {
-    picker = "auto",          -- "auto" | "snacks" | "telescope" | "fzf" | "select"
-    dirs = { "." },           -- directories scanned by :RestList
-  },
-})
-```
-
 ## Highlighting
 
 The response UI exposes these highlight groups. All are defined with
@@ -154,11 +205,6 @@ end
 
 The rest of the status line (`HTTP/1.1`, reason phrase) stays plain `Normal`;
 the response body is handled by treesitter for its content type.
-
-## Installation
-
-Not yet published. For local development, add this directory to
-`'runtimepath'`, or use `vim.pack.add` once the repository is pushed.
 
 ## Development
 
