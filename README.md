@@ -216,3 +216,17 @@ make smoke    # headless end-to-end run against example.com
 ```
 
 Tests live in `tests/` (busted); `.http` fixtures in `tests/fixtures/`.
+
+## About
+
+This plugin only exists because I wanted to create my own REST client; it is
+planned to be simple by default.
+
+Inspirations:
+
+- [dont-be-evil-company/kulala.nvim](https://github.com/dont-be-evil-company/kulala.nvim)
+- [rest-nvim/rest.nvim](https://github.com/rest-nvim/rest.nvim)
+
+## License
+
+[MIT](LICENSE)
