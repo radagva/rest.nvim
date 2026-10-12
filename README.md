@@ -1,5 +1,7 @@
 # rest.nvim
 
+[![CI](https://github.com/radagva/rest.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/radagva/rest.nvim/actions/workflows/ci.yml)
+
 A REST client for Neovim. Reads `.http` files, executes the request under the
 cursor, and shows the response (written in pure Lua with zero Lua/library
 dependencies).

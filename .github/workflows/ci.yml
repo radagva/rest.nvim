@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: stylua
+        run: |
+          curl -sSLo /tmp/stylua.zip \
+            https://github.com/JohnnyMorganz/StyLua/releases/download/v2.5.2/stylua-linux-x86_64.zip
+          unzip -q /tmp/stylua.zip -d /tmp/stylua
+          sudo install /tmp/stylua/stylua /usr/local/bin/stylua
+          stylua --check .
+
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.1"
+
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: install tools
+        run: |
+          luarocks install luacheck
+          luarocks install busted
+
+      - name: lint
+        run: make lint
+
+      - name: test
+        run: make test
