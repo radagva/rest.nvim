@@ -42,7 +42,8 @@ tour live in the README: https://github.com/radagva/rest.nvim
 
 							*:RestCopyCurl*
 :RestCopyCurl	Copy the request under the cursor (variables resolved) as
-		a curl command to the unnamed register.
+		a curl command to the system clipboard (`+`), ready to paste
+		into a terminal, and to the unnamed register.
 
 							*:RestImportCurl*
 :RestImportCurl

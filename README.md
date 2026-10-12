@@ -113,8 +113,9 @@ split (`rest://response`). The body is syntax-highlighted by content type
 ## curl interop
 
 `:RestCopyCurl` renders the request under the cursor (variables resolved)
-as a single-line, shell-quoted curl command, ready to paste into a terminal
-(yanked to the unnamed register).
+as a single-line, shell-quoted curl command and copies it to the system
+clipboard (`+`), ready to paste into a terminal; it also lands in the
+unnamed register for pasting inside Neovim.
 
 `:RestImportCurl` goes the other way: copy a command from browser DevTools
 and insert it as a `.http` request. It reads the clipboard first and falls

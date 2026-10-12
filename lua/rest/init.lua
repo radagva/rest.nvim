@@ -248,7 +248,9 @@ function M.run()
   end)
 end
 
----Copy the request under the cursor as a curl command to the unnamed register.
+---Copy the request under the cursor as a curl command to the system
+---clipboard (`+`, so it can be pasted into a terminal) and the unnamed
+---register.
 function M.copy_curl()
   local doc, perr = parse_buffer()
   if not doc then
@@ -286,8 +288,9 @@ function M.copy_curl()
     headers = resolved.headers,
     body = resolved.body,
   })
+  vim.fn.setreg("+", cmd)
   vim.fn.setreg('"', cmd)
-  notify("copied curl command to the unnamed register", vim.log.levels.INFO)
+  notify("copied curl command to the clipboard", vim.log.levels.INFO)
 end
 
 ---Insert a curl command as a `.http` request. Reads the clipboard first and
