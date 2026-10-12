@@ -22,3 +22,7 @@ end, { desc = "Insert a curl command from the clipboard as a .http request" })
 vim.api.nvim_create_user_command("RestCookiesClear", function()
   require("rest").cookies_clear()
 end, { desc = "Delete the rest.nvim cookie jar" })
+
+vim.api.nvim_create_user_command("RestEnv", function(cmd)
+  require("rest").env(cmd.args ~= "" and cmd.args or nil)
+end, { desc = "Show or switch the active environment (rest-env.json)", nargs = "?" })

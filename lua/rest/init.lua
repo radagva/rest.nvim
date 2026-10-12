@@ -14,6 +14,7 @@ M.defaults = {
 M.options = vim.deepcopy(M.defaults)
 
 local responses = {}
+local active_env ---string (chosen via :RestEnv) | false (explicitly none) | nil (follow default)
 
 function M.setup(opts)
   M.options = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), opts or {})
@@ -23,9 +24,65 @@ local function notify(msg, level)
   vim.notify("rest.nvim: " .. msg, level or vim.log.levels.ERROR)
 end
 
+---Load `rest-env.json`, searched upward from the working directory.
+---Returns `state, err`: `nil, nil` when no file exists; `nil, err` when the
+---file exists but cannot be decoded or normalized.
+local function load_env_file()
+  local found = vim.fs.find("rest-env.json", { upward = true, path = vim.fn.getcwd() })[1]
+  if not found then
+    return nil, nil
+  end
+  local text = table.concat(vim.fn.readfile(found), "\n")
+  local ok, value = pcall(vim.json.decode, text)
+  if not ok then
+    return nil, ("rest-env.json: invalid JSON: %s"):format(tostring(value))
+  end
+  return require("rest.env").normalize(value)
+end
+
+---Variables of the active environment in `state` (nil when none applies).
+local function environment_vars(state)
+  if active_env == false then
+    return nil
+  end
+  local name = active_env or state.default
+  local vars = name and require("rest.env").vars(state, name)
+  if not vars and active_env then
+    -- chosen environment disappeared from the file: fall back to default
+    active_env = nil
+    name = state.default
+    vars = name and require("rest.env").vars(state, name)
+  end
+  return vars
+end
+
+---Environment layer for variable resolution, or nil (no file / disabled).
+---Broken files are reported once per call.
+local function environment_layer()
+  local state, err = load_env_file()
+  if err then
+    notify(err, vim.log.levels.WARN)
+    return nil
+  end
+  if not state then
+    return nil
+  end
+  return environment_vars(state)
+end
+
+---Resolution layer for a parsed document: file-level `@definitions` win over
+---the active environment's variables.
+local function resolution_definitions(doc)
+  local env = environment_layer()
+  if not env then
+    return doc.definitions
+  end
+  return vim.tbl_extend("force", env, doc.definitions)
+end
+
 ---Pick a request from the `.http` files under `list.dirs` and jump to it.
 function M.list()
-  require("rest.list").open(M.options.list)
+  require("rest.list").open(M.options.list, environment_layer())
 end
 
 ---Delete the cookie jar used by cookie-enabled requests.
@@ -36,6 +93,75 @@ function M.cookies_clear()
   else
     notify("no cookie jar to clear", vim.log.levels.WARN)
   end
+end
+
+local function count_vars(vars)
+  local n = 0
+  for _ in pairs(vars) do
+    n = n + 1
+  end
+  return n
+end
+
+local function announce_env(name, vars)
+  notify(("environment: %s (%d variable(s))"):format(name, count_vars(vars)), vim.log.levels.INFO)
+end
+
+---Show or switch the active environment (`rest-env.json`).
+---With `name` selects it directly; without, offers a picker (including an
+---entry to deactivate environments entirely).
+function M.env(name)
+  local state, err = load_env_file()
+  if err then
+    notify(err)
+    return
+  end
+  if not state then
+    notify(
+      ("rest-env.json not found (searched upward from %s)"):format(vim.fn.getcwd()),
+      vim.log.levels.WARN
+    )
+    return
+  end
+  local names = require("rest.env").names(state)
+  if #names == 0 then
+    notify("rest-env.json defines no environments", vim.log.levels.WARN)
+    return
+  end
+
+  if name then
+    local vars = require("rest.env").vars(state, name)
+    if not vars then
+      notify(("environment %q is not defined in rest-env.json"):format(name))
+      return
+    end
+    active_env = name
+    announce_env(name, vars)
+    return
+  end
+
+  local items = { "(none)" }
+  vim.list_extend(items, names)
+  vim.ui.select(items, {
+    prompt = "Environment",
+    format_item = function(item)
+      if item == state.default then
+        return ("%s (default)"):format(item)
+      end
+      return item
+    end,
+  }, function(choice)
+    if not choice then
+      return
+    end
+    if choice == "(none)" then
+      active_env = false
+      notify("environment: none", vim.log.levels.INFO)
+      return
+    end
+    active_env = choice
+    announce_env(choice, require("rest.env").vars(state, choice))
+  end)
 end
 
 local function parse_buffer()
@@ -97,11 +223,12 @@ function M.run()
     return
   end
 
-  local resolved, verr = require("rest.variables").resolve_request(request, doc.definitions, {
-    responses = responses,
-    decode = vim.json.decode,
-    encode = vim.json.encode,
-  })
+  local resolved, verr =
+    require("rest.variables").resolve_request(request, resolution_definitions(doc), {
+      responses = responses,
+      decode = vim.json.decode,
+      encode = vim.json.encode,
+    })
   if not resolved then
     notify(verr)
     return
@@ -136,11 +263,12 @@ function M.copy_curl()
     return
   end
 
-  local resolved, verr = require("rest.variables").resolve_request(request, doc.definitions, {
-    responses = responses,
-    decode = vim.json.decode,
-    encode = vim.json.encode,
-  })
+  local resolved, verr =
+    require("rest.variables").resolve_request(request, resolution_definitions(doc), {
+      responses = responses,
+      decode = vim.json.decode,
+      encode = vim.json.encode,
+    })
   if not resolved then
     notify(verr)
     return

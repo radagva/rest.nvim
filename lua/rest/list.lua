@@ -172,9 +172,10 @@ local function preview_request(ctx)
 end
 
 ---Parse every discovered file into `{ file, abs, requests }` entries.
----URLs are resolved against the file's own definitions (best effort: an
----unresolvable URL is kept as written).
-local function collect(dirs)
+---URLs are resolved against the file's own definitions over the optional
+---environment layer `env_defs` (best effort: an unresolvable URL is kept as
+---written).
+local function collect(dirs, env_defs)
   local parser = require("rest.parser")
   local variables = require("rest.variables")
   local files = {}
@@ -188,7 +189,11 @@ local function collect(dirs)
       else
         local requests = {}
         for _, r in ipairs(doc.requests) do
-          local url = variables.resolve(r.url, doc.definitions, {
+          local defs = doc.definitions
+          if env_defs then
+            defs = vim.tbl_extend("force", env_defs, defs)
+          end
+          local url = variables.resolve(r.url, defs, {
             responses = {},
             decode = vim.json.decode,
             encode = vim.json.encode,
@@ -446,8 +451,9 @@ end
 
 ---Open a picker over every request in the `.http` files under `opts.dirs`.
 ---`opts.picker` is `"auto"` (default), `"snacks"`, `"telescope"`, `"fzf"` or
----`"select"` (`vim.ui.select`).
-function M.open(opts)
+---`"select"` (`vim.ui.select`). `env_defs`, when given, is the environment
+---layer resolved beneath each file's own definitions.
+function M.open(opts, env_defs)
   opts = opts or {}
   require("rest.ui") -- defines the Rest* highlight groups used by the pickers
   local dirs = (opts.dirs and #opts.dirs > 0) and opts.dirs or { "." }
@@ -463,7 +469,7 @@ function M.open(opts)
     return
   end
 
-  local files = collect(dirs)
+  local files = collect(dirs, env_defs)
   if #files == 0 then
     notify(("no .http files found under %s"):format(table.concat(dirs, ", ")), vim.log.levels.WARN)
     return

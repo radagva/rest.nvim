@@ -87,6 +87,7 @@ require("rest").setup({
 | `:RestCopyCurl`    | Copy the request under the cursor as a curl command                    |
 | `:RestImportCurl`  | Insert a curl command from the clipboard as a `.http` request          |
 | `:RestCookiesClear` | Delete the cookie jar (see [Cookies](#cookies))                      |
+| `:RestEnv`          | Show or switch the active environment (see [Environments](#environments)) |
 
 Open a `.http` file and run the request under the cursor:
 
@@ -202,6 +203,29 @@ written to a stable path); set `cookies.path` to persist it across Neovim
 sessions.
 
 `:RestCookiesClear` deletes the jar (session or configured path).
+
+## Environments
+
+Variables can come from a `rest-env.json` file, searched upward from the
+working directory (project roots work without any config):
+
+```json
+{
+  "default": "dev",
+  "environments": {
+    "dev": { "host": "http://localhost:8000", "token": "dev-secret" },
+    "prod": { "host": "https://api.example.com", "token": "prod-secret" }
+  }
+}
+```
+
+Requests resolve `$host`, `$token`, ... from the active environment: the
+file's `default` unless `:RestEnv` switches it. File-level `@definitions` and
+response references still win over environment variables of the same name.
+
+- `:RestEnv` opens a picker over the environments (plus `(none)` to disable
+  environments for the session).
+- `:RestEnv prod` switches directly and reports how many variables are active.
 
 ## Highlighting
 
