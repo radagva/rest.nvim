@@ -52,6 +52,10 @@ require("rest").setup({
   timeout_s = 30,             -- curl --max-time in seconds
   follow_redirects = false,   -- pass curl -L
   verify_tls = true,          -- false to pass curl -k
+  cookies = {                 -- cookie jar (see Cookies)
+    enabled = false,          -- pass -b/-c to every request
+    path = nil,               -- jar file (default: session-only temp jar)
+  },
   jq_path = nil,              -- jq binary (default: auto-detect on $PATH)
   ui = { split = "vertical" }, -- response split: "vertical" | "horizontal"
   list = {
@@ -67,6 +71,8 @@ require("rest").setup({
 | `timeout_s`        | `number`   | `30`         | Request timeout, passed to `curl --max-time`.                                                                                |
 | `follow_redirects` | `boolean`  | `false`      | Follow redirects (`curl -L`).                                                                                                |
 | `verify_tls`       | `boolean`  | `true`       | Verify TLS certificates; `false` passes `curl -k`.                                                                           |
+| `cookies.enabled`  | `boolean`  | `false`      | Maintain a cookie jar across requests (see [Cookies](#cookies)).                                                             |
+| `cookies.path`     | `string?`  | `nil`        | Cookie jar file; `nil` uses a session-only temporary jar.                                                                    |
 | `jq_path`          | `string?`  | `nil`        | Explicit `jq` binary; by default jq is auto-detected on `$PATH`.                                                             |
 | `ui.split`         | `string`   | `"vertical"` | Response split direction: `"vertical"` or `"horizontal"`.                                                                    |
 | `list.picker`      | `string`   | `"auto"`     | `:RestList` backend: `"auto"`, `"snacks"`, `"telescope"`, `"fzf"` or `"select"` (see [Listing requests](#listing-requests)). |
@@ -74,12 +80,13 @@ require("rest").setup({
 
 ## Usage
 
-| Command          | Description                                                            |
-| ---------------- | ---------------------------------------------------------------------- |
-| `:RestRun`       | Run the `.http` request under the cursor                               |
-| `:RestList`      | Pick a request from all `.http` files under `list.dirs` and jump to it |
-| `:RestCopyCurl`  | Copy the request under the cursor as a curl command                    |
-| `:RestImportCurl` | Insert a curl command from the clipboard as a `.http` request         |
+| Command            | Description                                                            |
+| ------------------ | ---------------------------------------------------------------------- |
+| `:RestRun`         | Run the `.http` request under the cursor                               |
+| `:RestList`        | Pick a request from all `.http` files under `list.dirs` and jump to it |
+| `:RestCopyCurl`    | Copy the request under the cursor as a curl command                    |
+| `:RestImportCurl`  | Insert a curl command from the clipboard as a `.http` request          |
+| `:RestCookiesClear` | Delete the cookie jar (see [Cookies](#cookies))                      |
 
 Open a `.http` file and run the request under the cursor:
 
@@ -185,6 +192,16 @@ Responses are kept in memory for the current session: the tagged request must
 have been run before (otherwise resolution fails with
 `undefined response '<tag>'`). File definitions win over response refs of the
 same name.
+
+## Cookies
+
+With `cookies.enabled`, every request passes a Netscape cookie jar to curl
+(`-b`/`-c`), so `Set-Cookie` values from a login response flow into later
+requests. By default the jar is a session-only temporary file (nothing is
+written to a stable path); set `cookies.path` to persist it across Neovim
+sessions.
+
+`:RestCookiesClear` deletes the jar (session or configured path).
 
 ## Highlighting
 

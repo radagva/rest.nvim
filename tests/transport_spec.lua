@@ -89,6 +89,31 @@ describe("transport", function()
       local joined = table.concat(args, " ")
       assert.is_nil(joined:find("@/tmp/b", 1, true))
     end)
+
+    it("passes the cookie jar as both -b and -c", function()
+      local args = transport.build_curl_args({ method = "GET", url = "https://x" }, {
+        url = "https://x",
+        body_in = "/tmp/b",
+        header_out = "/tmp/h",
+        body_out = "/tmp/o",
+        cookie_jar = "/tmp/jar.txt",
+      })
+      local joined = table.concat(args, " ")
+      assert.matches(" %-b /tmp/jar%.txt", joined)
+      assert.matches(" %-c /tmp/jar%.txt", joined)
+    end)
+
+    it("omits cookie flags when no jar is configured", function()
+      local args = transport.build_curl_args({ method = "GET", url = "https://x" }, {
+        url = "https://x",
+        body_in = "/tmp/b",
+        header_out = "/tmp/h",
+        body_out = "/tmp/o",
+      })
+      local joined = table.concat(args, " ")
+      assert.is_nil(joined:find(" %-b ", 1, true))
+      assert.is_nil(joined:find(" %-c ", 1, true))
+    end)
   end)
 
   describe("resolve_url", function()

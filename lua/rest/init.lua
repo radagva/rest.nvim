@@ -5,6 +5,7 @@ M.defaults = {
   timeout_s = 30,
   follow_redirects = false,
   verify_tls = true,
+  cookies = { enabled = false, path = nil },
   jq_path = nil,
   ui = { split = "vertical" },
   list = { picker = "auto", dirs = { "." } },
@@ -25,6 +26,16 @@ end
 ---Pick a request from the `.http` files under `list.dirs` and jump to it.
 function M.list()
   require("rest.list").open(M.options.list)
+end
+
+---Delete the cookie jar used by cookie-enabled requests.
+function M.cookies_clear()
+  local removed = require("rest.transport").clear_cookies(M.options.cookies)
+  if removed > 0 then
+    notify(("cleared %d cookie jar(s)"):format(removed), vim.log.levels.INFO)
+  else
+    notify("no cookie jar to clear", vim.log.levels.WARN)
+  end
 end
 
 local function parse_buffer()

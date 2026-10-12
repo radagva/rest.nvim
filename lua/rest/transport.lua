@@ -17,7 +17,8 @@ end
 ---Build the curl argv for a request.
 ---
 ---`opts` fields: url, body_in, header_out, body_out (file paths),
----follow_redirects, verify_tls, timeout_s.
+---follow_redirects, verify_tls, timeout_s, cookie_jar (jar file passed as
+---both `-b` and `-c`).
 function M.build_curl_args(req, opts)
   local args = { "curl", "-sS", "-X", req.method }
   if opts.follow_redirects then
@@ -29,6 +30,12 @@ function M.build_curl_args(req, opts)
   if opts.timeout_s then
     args[#args + 1] = "-m"
     args[#args + 1] = tostring(opts.timeout_s)
+  end
+  if opts.cookie_jar then
+    args[#args + 1] = "-b"
+    args[#args + 1] = opts.cookie_jar
+    args[#args + 1] = "-c"
+    args[#args + 1] = opts.cookie_jar
   end
   args[#args + 1] = "-D"
   args[#args + 1] = opts.header_out
@@ -96,6 +103,45 @@ local function read_file(path)
   return content
 end
 
+---Path of the session cookie jar (created lazily, once per session).
+local session_jar
+
+---Resolve the cookie jar for a send: nil when disabled, the expanded
+---`cookies.path` for a persistent jar, else a session-only temp file.
+local function cookie_jar(cookies)
+  if not cookies or not cookies.enabled then
+    return nil
+  end
+  if cookies.path and cookies.path ~= "" then
+    return vim.fn.expand(cookies.path)
+  end
+  if not session_jar then
+    session_jar = vim.fn.tempname() .. "_cookies"
+  end
+  return session_jar
+end
+
+---Delete the session and/or configured cookie jar.
+---Returns how many jar files were removed.
+function M.clear_cookies(cookies)
+  local removed = 0
+  if session_jar then
+    if vim.fn.filereadable(session_jar) == 1 then
+      os.remove(session_jar)
+      removed = removed + 1
+    end
+    session_jar = nil
+  end
+  if cookies and cookies.path and cookies.path ~= "" then
+    local path = vim.fn.expand(cookies.path)
+    if vim.fn.filereadable(path) == 1 then
+      os.remove(path)
+      removed = removed + 1
+    end
+  end
+  return removed
+end
+
 ---Send a request asynchronously.
 ---
 ---Builds an absolute URL, spawns curl via vim.system and parses the response.
@@ -133,6 +179,7 @@ function M.send(request, opts, callback)
     follow_redirects = opts.follow_redirects,
     verify_tls = opts.verify_tls,
     timeout_s = opts.timeout_s,
+    cookie_jar = cookie_jar(opts.cookies),
   })
 
   vim.system(argv, { text = true }, function(out)

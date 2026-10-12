@@ -18,3 +18,7 @@ end, { desc = "Copy the request under the cursor as a curl command" })
 vim.api.nvim_create_user_command("RestImportCurl", function()
   require("rest").import_curl()
 end, { desc = "Insert a curl command from the clipboard as a .http request" })
+
+vim.api.nvim_create_user_command("RestCookiesClear", function()
+  require("rest").cookies_clear()
+end, { desc = "Delete the rest.nvim cookie jar" })
