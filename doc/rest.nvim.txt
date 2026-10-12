@@ -1,0 +1,176 @@
+*rest.nvim.txt*					*rest.nvim*
+
+Author:  Angel Rada
+License: MIT (see |rest.nvim-license|)
+
+==============================================================================
+CONTENTS						*rest.nvim-contents*
+
+1. Introduction ................................. |rest.nvim-introduction|
+2. Commands ..................................... |rest.nvim-commands|
+3. Configuration ................................ |rest.nvim-configuration|
+4. Environments .................................. |rest.nvim-environments|
+5. Cookies ...................................... |rest.nvim-cookies|
+6. Highlighting ................................. |rest.nvim-highlighting|
+7. License ...................................... |rest.nvim-license|
+
+==============================================================================
+1. INTRODUCTION					*rest.nvim-introduction*
+
+rest.nvim is a REST client for Neovim. It parses `.http` files (request
+line, headers and body per RFC 9112), runs the request under the cursor
+with curl, and shows the response in a split.
+
+Requires Neovim 0.12+ and curl. jq is optional and only used to
+pretty-print and filter JSON output.
+
+Installation, the `.http` format, request chaining and the full feature
+tour live in the README: https://github.com/radagva/rest.nvim
+
+==============================================================================
+2. COMMANDS						*rest.nvim-commands*
+
+								*:RestRun*
+:RestRun	Execute the .http request under the cursor and show the
+		response. The request is resolved against file-level
+		`@definitions`, the active environment and previous
+		responses (in that order of precedence).
+
+								*:RestList*
+:RestList	Pick a request from all .http files under `list.dirs` and
+		jump to it. See the `list.picker` option for backends.
+
+							*:RestCopyCurl*
+:RestCopyCurl	Copy the request under the cursor (variables resolved) as
+		a curl command to the unnamed register.
+
+							*:RestImportCurl*
+:RestImportCurl
+		Insert a curl command as an .http request. The clipboard is
+		used first; when it holds no curl command you are prompted.
+		Fills an empty buffer, otherwise appends after the last line.
+
+							*:RestCookiesClear*
+:RestCookiesClear
+		Delete the cookie jar (session or configured path). See
+		|rest.nvim-cookies|.
+
+								*:RestEnv*
+:RestEnv [name]
+		Show or switch the active environment from `rest-env.json`.
+		Without arguments, opens a picker over the environments
+		(plus a "(none)" entry that disables environments for the
+		session). With `name`, switches directly. See
+		|rest.nvim-environments|.
+
+==============================================================================
+3. CONFIGURATION					*rest.nvim-configuration*
+
+Call the setup function once (values shown are the defaults): >lua
+
+  require("rest").setup({
+    base_url = nil,
+    timeout_s = 30,
+    follow_redirects = false,
+    verify_tls = true,
+    cookies = { enabled = false, path = nil },
+    jq_path = nil,
+    ui = { split = "vertical" },
+    list = { picker = "auto", dirs = { "." } },
+  })
+<
+base_url		Prepended to relative request URLs. A relative URL
+			without base_url is an error.
+timeout_s		Request timeout in seconds.
+follow_redirects	Follow HTTP redirects when true.
+verify_tls		Verify TLS certificates when true.
+cookies.enabled		Enable the shared cookie jar |rest.nvim-cookies|.
+cookies.path		Persistent jar path; a session-only temporary file
+			when unset.
+jq_path			Path to the jq binary; auto-detected when nil.
+ui.split		"vertical", "horizontal" or "none" for the response
+			window.
+list.picker		"auto", "snacks", "telescope", "fzf" or "select".
+list.dirs		Directories searched by |:RestList|.
+
+==============================================================================
+4. ENVIRONMENTS					*rest.nvim-environments*
+
+Request variables can come from a `rest-env.json` file, searched upward
+from the working directory: >
+
+  {
+    "default": "dev",
+    "environments": {
+      "dev": { "host": "http://localhost:8000", "token": "dev-secret" },
+      "prod": { "host": "https://api.example.com", "token": "prod-secret" }
+    }
+  }
+<
+Requests resolve `$host`, `$token` and so on from the active
+environment: the file's `default` unless |:RestEnv| switches it. Values
+may be strings, numbers or booleans.
+
+Precedence: file-level `@definitions` and response references win over
+environment variables of the same name.
+
+The file is re-read on every request, so edits apply immediately. A
+broken file is reported and skipped; a missing file is not an error.
+
+==============================================================================
+5. COOKIES						*rest.nvim-cookies*
+
+With `cookies.enabled`, every request passes a Netscape cookie jar to
+curl (`-b`/`-c`), so Set-Cookie values from a login response flow into
+later requests. By default the jar is a session-only temporary file;
+set `cookies.path` to persist it across Neovim sessions.
+
+|:RestCookiesClear| deletes the jar (session or configured path).
+
+==============================================================================
+6. HIGHLIGHTING					*rest.nvim-highlighting*
+
+The response UI defines these highlight groups with `default = true`,
+so your colorscheme can override them (for example from its
+`on_highlights`):
+
+  RestStatusCodeSuccess		2xx
+  RestStatusCodeRedirect	3xx
+  RestStatusCodeError		4xx
+  RestStatusCodeInformation	informational
+  RestStatusCodeServerError	5xx
+  RestHeadingsAttributes	header names
+  RestHeadingsValues		header values
+  RestMethod, RestMethodGet, RestMethodPost, RestMethodPut,
+  RestMethodPatch, RestMethodDelete, RestMethodHead,
+  RestMethodOptions, RestMethodTrace, RestMethodConnect
+				request methods in the picker
+  RestList			picker rows
+
+==============================================================================
+7. LICENSE						*rest.nvim-license*
+
+MIT License
+
+Copyright (c) 2026 Angel Rada
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
