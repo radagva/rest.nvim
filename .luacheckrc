@@ -10,4 +10,4 @@ files["lua/rest/format.lua"].std = "lua51"
 files["lua/rest/curl.lua"].std = "lua51"
 files["lua/rest/env.lua"].std = "lua51"
 
-exclude_files = { ".luarocks" }
+exclude_files = { ".luarocks", ".luarocks/**" }
