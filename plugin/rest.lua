@@ -10,3 +10,11 @@ end, { desc = "Run the .http request under the cursor" })
 vim.api.nvim_create_user_command("RestList", function()
   require("rest").list()
 end, { desc = "Pick a request from all .http files and jump to it" })
+
+vim.api.nvim_create_user_command("RestCopyCurl", function()
+  require("rest").copy_curl()
+end, { desc = "Copy the request under the cursor as a curl command" })
+
+vim.api.nvim_create_user_command("RestImportCurl", function()
+  require("rest").import_curl()
+end, { desc = "Insert a curl command from the clipboard as a .http request" })

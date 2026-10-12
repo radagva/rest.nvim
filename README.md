@@ -74,10 +74,12 @@ require("rest").setup({
 
 ## Usage
 
-| Command     | Description                                                            |
-| ----------- | ---------------------------------------------------------------------- |
-| `:RestRun`  | Run the `.http` request under the cursor                               |
-| `:RestList` | Pick a request from all `.http` files under `list.dirs` and jump to it |
+| Command          | Description                                                            |
+| ---------------- | ---------------------------------------------------------------------- |
+| `:RestRun`       | Run the `.http` request under the cursor                               |
+| `:RestList`      | Pick a request from all `.http` files under `list.dirs` and jump to it |
+| `:RestCopyCurl`  | Copy the request under the cursor as a curl command                    |
+| `:RestImportCurl` | Insert a curl command from the clipboard as a `.http` request         |
 
 Open a `.http` file and run the request under the cursor:
 
@@ -97,6 +99,19 @@ Accept: application/json
 `@name = value`, sends the request with `curl`, and opens the response in a
 split (`rest://response`). The body is syntax-highlighted by content type
 (treesitter when a parser is installed; status and headers stay dimmed).
+
+## curl interop
+
+`:RestCopyCurl` renders the request under the cursor (variables resolved)
+as a single-line, shell-quoted curl command, ready to paste into a terminal
+(yanked to the unnamed register).
+
+`:RestImportCurl` goes the other way: copy a command from browser DevTools
+and insert it as a `.http` request. It reads the clipboard first and falls
+back to a prompt when the clipboard does not hold a curl command. Common
+flags are understood (`-X`, `-H`, `-d*`, `--json`, `-A`, `-b`, `-e`, `-u`,
+`-I`, `-G`, `--url`), repeated `-d` is joined with `&` as curl does, and
+`-u user:pass` becomes a `Basic` authorization header.
 
 ## Listing requests
 
