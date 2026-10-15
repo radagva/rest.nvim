@@ -163,6 +163,41 @@ request headers and raw bodies (RFC 9112 message shape).
 A `$` not followed by a letter or underscore is left as-is (`$99.99`, `$5`),
 so JSON bodies with prices stay intact. Write `$$word` for a literal `$word`.
 
+## Plugin globals
+
+The `$_` prefix is reserved for plugin globals. `$_now` resolves to the
+moment the request is resolved, as a local ISO 8601 timestamp
+(`2026-10-15T14:30:05`); its fields are the zero-padded components of that
+same string:
+
+| Path           | Value                 |
+| -------------- | --------------------- |
+| `$_now`        | `2026-10-15T14:30:05` |
+| `$_now.year`   | `2026`                |
+| `$_now.month`  | `10`                  |
+| `$_now.day`    | `15`                  |
+| `$_now.hour`   | `14`                  |
+| `$_now.minute` | `30`                  |
+| `$_now.second` | `05`                  |
+
+Fields shift with `.add(n)` / `.sub(n)` (integer `n`); the result is the
+full timestamp after calendar normalization, so it is always a valid time.
+All `$_now` references inside one request see the same instant:
+
+```http
+POST https://api.example.com/sessions
+Content-Type: application/json
+
+{"issuedAt": "$_now", "expiresAt": "$_now.hour.add(2)", "validUntil": "$_now.day.add(7)"}
+```
+
+`$_now.hour.add(4)` at 23:30 rolls into the next day at 03:30, and
+`$_now.month.add(1)` on Jan 31 clamps to Feb 28 (29 in a leap year).
+
+Because the prefix is reserved, defining a variable whose name starts with
+`_` (a file-level `@_name = value` or an environment variable in
+`rest-env.json`) raises a warning and stops the request.
+
 ## Chaining requests
 
 Tag a request with `@name <tag>` (before its request line). Once that request

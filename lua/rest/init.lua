@@ -223,12 +223,18 @@ function M.run()
     return
   end
 
-  local resolved, verr =
-    require("rest.variables").resolve_request(request, resolution_definitions(doc), {
-      responses = responses,
-      decode = vim.json.decode,
-      encode = vim.json.encode,
-    })
+  local defs = resolution_definitions(doc)
+  local reserved = require("rest.variables").check_defs(defs)
+  if reserved then
+    notify(reserved, vim.log.levels.WARN)
+    return
+  end
+
+  local resolved, verr = require("rest.variables").resolve_request(request, defs, {
+    responses = responses,
+    decode = vim.json.decode,
+    encode = vim.json.encode,
+  })
   if not resolved then
     notify(verr)
     return
@@ -265,12 +271,18 @@ function M.copy_curl()
     return
   end
 
-  local resolved, verr =
-    require("rest.variables").resolve_request(request, resolution_definitions(doc), {
-      responses = responses,
-      decode = vim.json.decode,
-      encode = vim.json.encode,
-    })
+  local defs = resolution_definitions(doc)
+  local reserved = require("rest.variables").check_defs(defs)
+  if reserved then
+    notify(reserved, vim.log.levels.WARN)
+    return
+  end
+
+  local resolved, verr = require("rest.variables").resolve_request(request, defs, {
+    responses = responses,
+    decode = vim.json.decode,
+    encode = vim.json.encode,
+  })
   if not resolved then
     notify(verr)
     return

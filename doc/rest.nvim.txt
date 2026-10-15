@@ -10,9 +10,10 @@ CONTENTS						*rest.nvim-contents*
 2. Commands ..................................... |rest.nvim-commands|
 3. Configuration ................................ |rest.nvim-configuration|
 4. Environments .................................. |rest.nvim-environments|
-5. Cookies ...................................... |rest.nvim-cookies|
-6. Highlighting ................................. |rest.nvim-highlighting|
-7. License ...................................... |rest.nvim-license|
+5. Plugin globals ............................... |rest.nvim-globals|
+6. Cookies ...................................... |rest.nvim-cookies|
+7. Highlighting ................................. |rest.nvim-highlighting|
+8. License ...................................... |rest.nvim-license|
 
 ==============================================================================
 1. INTRODUCTION					*rest.nvim-introduction*
@@ -119,7 +120,38 @@ The file is re-read on every request, so edits apply immediately. A
 broken file is reported and skipped; a missing file is not an error.
 
 ==============================================================================
-5. COOKIES						*rest.nvim-cookies*
+5. PLUGIN GLOBALS					*rest.nvim-globals*
+
+The `$_` prefix is reserved for plugin globals. Defining a variable
+whose name starts with `_` (a file-level `@definition` or an entry in
+|rest.nvim-environments|) shows a warning and stops the request.
+
+$_now		Moment the request is resolved, as a local ISO 8601
+		timestamp (`2026-10-15T14:30:05`). All $_now references
+		in one request see the same instant.
+
+		  `$_now`	`2026-10-15T14:30:05`
+		  `$_now.year`	`2026`
+		  `$_now.month`	`10` (zero-padded)
+		  `$_now.day`	`15` (zero-padded)
+		  `$_now.hour`	`14` (zero-padded)
+		  `$_now.minute` `30` (zero-padded)
+		  `$_now.second` `05` (zero-padded)
+
+		Fields shift with `.add(n)` / `.sub(n)` (integer n); the
+		result is the full timestamp after calendar
+		normalization, so it is always a valid time: >
+  POST https://api.example.com/sessions
+  Content-Type: application/json
+
+  {"expiresAt": "$_now.hour.add(2)", "validUntil": "$_now.day.add(7)"}
+<
+		At 23:30, `$_now.hour.add(4)` rolls into the next day at
+		03:30; on Jan 31, `$_now.month.add(1)` clamps to Feb 28
+		(29 in a leap year).
+
+==============================================================================
+6. COOKIES						*rest.nvim-cookies*
 
 With `cookies.enabled`, every request passes a Netscape cookie jar to
 curl (`-b`/`-c`), so Set-Cookie values from a login response flow into
@@ -129,7 +161,7 @@ set `cookies.path` to persist it across Neovim sessions.
 |:RestCookiesClear| deletes the jar (session or configured path).
 
 ==============================================================================
-6. HIGHLIGHTING					*rest.nvim-highlighting*
+7. HIGHLIGHTING					*rest.nvim-highlighting*
 
 The response UI defines these highlight groups with `default = true`,
 so your colorscheme can override them (for example from its
@@ -149,7 +181,7 @@ so your colorscheme can override them (for example from its
   RestList			picker rows
 
 ==============================================================================
-7. LICENSE						*rest.nvim-license*
+8. LICENSE						*rest.nvim-license*
 
 MIT License
 

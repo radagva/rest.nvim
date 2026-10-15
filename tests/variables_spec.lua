@@ -315,4 +315,197 @@ describe("variables", function()
       assert.equals("Bearer tok-123", resolved.headers[1].value)
     end)
   end)
+
+  describe("$_now", function()
+    local now = { year = 2026, month = 10, day = 15, hour = 14, min = 30, sec = 5 }
+    local opts = { now = now }
+
+    it("resolves to a local ISO 8601 timestamp", function()
+      assert.equals("2026-10-15T14:30:05", variables.resolve("$_now", {}, opts))
+      assert.equals("sent at 2026-10-15T14:30:05!", variables.resolve("sent at $_now!", {}, opts))
+    end)
+
+    it("resolves the real clock to an ISO 8601 timestamp", function()
+      local out = assert(variables.resolve("$_now", {}))
+      assert.matches("^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%d$", out)
+    end)
+
+    it("resolves zero-padded fields", function()
+      assert.equals("2026", variables.resolve("$_now.year", {}, opts))
+      assert.equals("10", variables.resolve("$_now.month", {}, opts))
+      assert.equals("15", variables.resolve("$_now.day", {}, opts))
+      assert.equals("14", variables.resolve("$_now.hour", {}, opts))
+      assert.equals("30", variables.resolve("$_now.minute", {}, opts))
+      assert.equals("05", variables.resolve("$_now.second", {}, opts))
+    end)
+
+    it("zero-pads single-digit components", function()
+      local o = { now = { year = 2026, month = 3, day = 5, hour = 7, min = 6, sec = 5 } }
+      assert.equals("2026-03-05T07:06:05", variables.resolve("$_now", {}, o))
+      assert.equals("03", variables.resolve("$_now.month", {}, o))
+      assert.equals("05", variables.resolve("$_now.day", {}, o))
+      assert.equals("07", variables.resolve("$_now.hour", {}, o))
+      assert.equals("06", variables.resolve("$_now.minute", {}, o))
+      assert.equals("05", variables.resolve("$_now.second", {}, o))
+    end)
+
+    it("add and sub resolve to the full timestamp", function()
+      assert.equals("2026-10-15T18:30:05", variables.resolve("$_now.hour.add(4)", {}, opts))
+      assert.equals("2026-10-15T07:30:05", variables.resolve("$_now.hour.sub(7)", {}, opts))
+      assert.equals("2026-10-15T14:32:05", variables.resolve("$_now.minute.add(2)", {}, opts))
+      assert.equals("2026-10-15T14:31:05", variables.resolve("$_now.second.add(60)", {}, opts))
+      assert.equals("2026-10-16T14:30:05", variables.resolve("$_now.day.add(1)", {}, opts))
+      assert.equals("2026-10-16T00:30:05", variables.resolve("$_now.hour.add(10)", {}, opts))
+      assert.equals("2026-11-15T14:30:05", variables.resolve("$_now.month.add(1)", {}, opts))
+      assert.equals("2025-10-15T14:30:05", variables.resolve("$_now.year.sub(1)", {}, opts))
+      assert.equals("2026-10-15T14:30:05", variables.resolve("$_now.hour.add(0)", {}, opts))
+      assert.equals("2026-10-15T14:30:05", variables.resolve("$_now.second.sub(0)", {}, opts))
+    end)
+
+    it("rolls over across day, month and year boundaries", function()
+      local o = { now = { year = 2026, month = 12, day = 31, hour = 23, min = 59, sec = 59 } }
+      assert.equals("2027-01-01T00:59:59", variables.resolve("$_now.hour.add(1)", {}, o))
+      assert.equals("2027-01-01T00:00:59", variables.resolve("$_now.minute.add(1)", {}, o))
+      assert.equals("2027-01-01T00:00:00", variables.resolve("$_now.second.add(1)", {}, o))
+      assert.equals("2027-01-01T23:59:59", variables.resolve("$_now.day.add(1)", {}, o))
+      assert.equals("2027-01-31T23:59:59", variables.resolve("$_now.month.add(1)", {}, o))
+    end)
+
+    it("rolls backwards across boundaries", function()
+      local o = { now = { year = 2026, month = 10, day = 5, hour = 3, min = 0, sec = 0 } }
+      assert.equals("2026-10-04T20:00:00", variables.resolve("$_now.hour.sub(7)", {}, o))
+      assert.equals("2026-09-25T14:30:05", variables.resolve("$_now.day.sub(20)", {}, opts))
+      assert.equals("2025-11-15T14:30:05", variables.resolve("$_now.month.sub(11)", {}, opts))
+    end)
+
+    it("clamps the day when a shift overflows the target month", function()
+      local jan = { now = { year = 2026, month = 1, day = 31, hour = 12, min = 0, sec = 0 } }
+      assert.equals("2026-02-28T12:00:00", variables.resolve("$_now.month.add(1)", {}, jan))
+
+      local leap_jan = { now = { year = 2028, month = 1, day = 31, hour = 12, min = 0, sec = 0 } }
+      assert.equals("2028-02-29T12:00:00", variables.resolve("$_now.month.add(1)", {}, leap_jan))
+
+      local leap_day = { now = { year = 2028, month = 2, day = 29, hour = 12, min = 0, sec = 0 } }
+      assert.equals("2029-02-28T12:00:00", variables.resolve("$_now.year.add(1)", {}, leap_day))
+    end)
+
+    it("does not touch parens outside plugin globals", function()
+      assert.equals("v(1)", variables.resolve("$host(1)", { host = "v" }))
+      assert.equals("v(a(b))", variables.resolve("$host(a(b))", { host = "v" }))
+      assert.equals("(v)", variables.resolve("($host)", { host = "v" }))
+    end)
+
+    it("keeps the $$ escape working", function()
+      assert.equals("$_now", variables.resolve("$$_now", {}))
+      assert.equals("x$_now", variables.resolve("x$$_now", {}))
+    end)
+
+    it("errors on unknown fields", function()
+      local out, err = variables.resolve("$_now.foo", {}, opts)
+      assert.is_nil(out)
+      assert.matches("unknown '$_now' field 'foo'", err)
+
+      out, err = variables.resolve("$_now.foo.add(1)", {}, opts)
+      assert.is_nil(out)
+      assert.matches("unknown '$_now' field 'foo'", err)
+    end)
+
+    it("errors on malformed references", function()
+      local cases = {
+        "$_now(4)",
+        "$_now.hour(4)",
+        "$_now.hour.add",
+        "$_now.hour.add()",
+        "$_now.hour.add(x)",
+        "$_now.hour.add(1.5)",
+        "$_now.hour.add (4)",
+        "$_now.hour.foo",
+        "$_now.year.month",
+      }
+      for _, case in ipairs(cases) do
+        local out, err = variables.resolve(case, {}, opts)
+        assert(out == nil, ("%s: expected an error, got %q"):format(case, tostring(out)))
+        assert(
+          type(err) == "string" and err:find("invalid '$_now' reference", 1, true),
+          ("%s: unexpected error %q"):format(case, tostring(err))
+        )
+      end
+    end)
+
+    it("errors on unknown plugin globals", function()
+      local out, err = variables.resolve("$_nope", {}, opts)
+      assert.is_nil(out)
+      assert.matches("undefined variable '_nope'", err)
+      assert.matches("prefix is reserved", err)
+    end)
+
+    it("still resolves $_-rooted response refs (tags may start with _)", function()
+      local o = {
+        responses = {
+          _api = { ok = true, status = 200, headers = {}, body = '{"ok":true}' },
+        },
+        decode = function()
+          return { ok = true }
+        end,
+        encode = function()
+          return '{"ok":true}'
+        end,
+      }
+      assert.equals("true", variables.resolve("$_api.response.body.ok", {}, o))
+    end)
+
+    it("shares one snapshot across url, headers and body", function()
+      local request = {
+        method = "POST",
+        url = "https://example.com/?ts=$_now",
+        headers = { { name = "X-Sent", value = "$_now" } },
+        body = '{"sentAt": "$_now"}',
+      }
+      local resolved = assert(variables.resolve_request(request, {}, opts))
+      assert.equals("https://example.com/?ts=2026-10-15T14:30:05", resolved.url)
+      assert.equals("2026-10-15T14:30:05", resolved.headers[1].value)
+      assert.equals('{"sentAt": "2026-10-15T14:30:05"}', resolved.body)
+    end)
+
+    it("snapshots the real clock once per request", function()
+      local request = {
+        method = "POST",
+        url = "$_now",
+        headers = { { name = "X-Sent", value = "$_now" } },
+        body = "$_now",
+      }
+      local resolved = assert(variables.resolve_request(request, {}))
+      assert.equals(resolved.url, resolved.headers[1].value)
+      assert.equals(resolved.url, resolved.body)
+    end)
+  end)
+
+  describe("reserved $_ definitions", function()
+    it("rejects definitions prefixed with _", function()
+      local out, err = variables.resolve("$x", { _now = "nope", x = "1" })
+      assert.is_nil(out)
+      assert.matches("'$_' prefix is reserved", err)
+      assert.matches("remove the '_now' definition", err)
+    end)
+
+    it("cannot shadow a plugin global", function()
+      local out, err = variables.resolve("$_now", { _now = "nope" })
+      assert.is_nil(out)
+      assert.matches("'$_' prefix is reserved", err)
+    end)
+
+    it("rejects them through resolve_request", function()
+      local request = { method = "GET", url = "https://example.com", headers = {} }
+      local out, err = variables.resolve_request(request, { _token = "x" })
+      assert.is_nil(out)
+      assert.matches("'$_' prefix is reserved", err)
+    end)
+
+    it("exposes check_defs for callers", function()
+      assert.is_nil(variables.check_defs({ host = "h", ["a.b"] = "c" }))
+      assert.is_nil(variables.check_defs({}))
+      local err = variables.check_defs({ _private = "x" })
+      assert.matches("'$_' prefix is reserved", err)
+    end)
+  end)
 end)
