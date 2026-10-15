@@ -462,6 +462,116 @@ function M.check_defs(defs)
   return nil
 end
 
+---The `a -> b -> a` path reported for a circular definition, or nil when
+---`name` is not already being resolved.
+local function cycle_path(chain, name)
+  local parts = {}
+  local seen = false
+  for _, entry in ipairs(chain) do
+    parts[#parts + 1] = entry
+    if entry == name then
+      seen = true
+    end
+  end
+  if not seen then
+    return nil
+  end
+  parts[#parts + 1] = name
+  return table.concat(parts, " -> ")
+end
+
+---Resolve `$name` references in `text` against `defs`. `now_t` is the
+---shared `$_now` snapshot; `chain` holds the definition names currently
+---being resolved (pushed and popped around each derived value) for cycle
+---detection. The third return value marks a circular-definition error so
+---callers propagate it unwrapped.
+local function resolve_text(text, defs, opts, now_t, chain)
+  local parts = {}
+  local err, err_cycle
+  local function fail(msg, cycle)
+    if err == nil then
+      err = msg
+      err_cycle = cycle == true
+    end
+  end
+
+  local init = 1
+  while true do
+    local s, e, name = text:find(PATTERN, init)
+    if not s then
+      break
+    end
+    parts[#parts + 1] = text:sub(init, s - 1)
+
+    local stop = e
+    local replacement
+    if name:sub(1, 1) == "$" then
+      replacement = name
+    else
+      local core, dots = name:match("^(.-)(%.*)$")
+      if GLOBALS[core:match("^[^%.]+")] then
+        local value, gerr, stop2 = resolve_global(core, e, text, now_t)
+        if not value then
+          fail(gerr)
+          replacement = ""
+        else
+          replacement = value .. dots
+          stop = stop2
+        end
+      elseif defs[core] ~= nil then
+        local raw = defs[core]
+        if type(raw) ~= "string" then
+          replacement = tostring(raw) .. dots
+        else
+          local path = cycle_path(chain, core)
+          if path then
+            fail(("circular definition: %s"):format(path), true)
+            replacement = ""
+          else
+            chain[#chain + 1] = core
+            local value, derr, dcyc = resolve_text(raw, defs, opts, now_t, chain)
+            chain[#chain] = nil
+            if not value then
+              if dcyc then
+                fail(derr, true)
+              else
+                fail(("definition '%s': %s"):format(core, derr))
+              end
+              replacement = ""
+            else
+              replacement = value .. dots
+            end
+          end
+        end
+      elseif core:find(".", 1, true) then
+        local value, rerr = resolve_ref(core, opts)
+        if not value then
+          fail(rerr)
+          replacement = ""
+        else
+          replacement = value .. dots
+        end
+      else
+        if core:sub(1, 1) == "_" then
+          fail(("undefined variable '%s' ($_ prefix is reserved)"):format(core))
+        else
+          fail(("undefined variable '%s'"):format(core))
+        end
+        replacement = ""
+      end
+    end
+
+    parts[#parts + 1] = replacement
+    init = stop + 1
+  end
+  parts[#parts + 1] = text:sub(init)
+
+  if err then
+    return nil, err, err_cycle
+  end
+  return table.concat(parts)
+end
+
 ---Substitute `$name` references in `text` using `defs`.
 ---Names shaped like `<tag>.response.<path>` resolve against `opts.responses`
 ---(body fields are decoded with `opts.decode`; objects/arrays are inlined as
@@ -480,6 +590,14 @@ end
 ---(`$_now.addDays(1).day`). Definitions must not use the `$_` prefix; see
 ---`check_defs`.
 ---
+---Definitions are derived: a definition's value goes through this same
+---resolution before it is substituted, so other definitions, environment
+---values, previous responses and `$_` globals all work inside
+---`@name = value`. Values share `now_t`, so everything in one request sees
+---one clock snapshot. Failures inside a value are reported as
+---`definition '<name>': <error>`; a definition that (directly or through
+---others) references itself reports `circular definition: <path>`.
+---
 ---Returns the resolved string, or `nil, err`.
 function M.resolve(text, defs, opts)
   if type(text) ~= "string" then
@@ -493,61 +611,8 @@ function M.resolve(text, defs, opts)
   end
 
   local now_t = (opts and opts.now) or os.date("*t")
-
-  local parts = {}
-  local err
-  local init = 1
-  while true do
-    local s, e, name = text:find(PATTERN, init)
-    if not s then
-      break
-    end
-    parts[#parts + 1] = text:sub(init, s - 1)
-
-    local stop = e
-    local replacement
-    if name:sub(1, 1) == "$" then
-      replacement = name
-    else
-      local core, dots = name:match("^(.-)(%.*)$")
-      if GLOBALS[core:match("^[^%.]+")] then
-        local value, gerr, stop2 = resolve_global(core, e, text, now_t)
-        if not value then
-          err = err or gerr
-          replacement = ""
-        else
-          replacement = value .. dots
-          stop = stop2
-        end
-      elseif defs[core] ~= nil then
-        replacement = defs[core] .. dots
-      elseif core:find(".", 1, true) then
-        local value, rerr = resolve_ref(core, opts)
-        if not value then
-          err = err or rerr
-          replacement = ""
-        else
-          replacement = value .. dots
-        end
-      else
-        if core:sub(1, 1) == "_" then
-          err = err or ("undefined variable '%s' ($_ prefix is reserved)"):format(core)
-        else
-          err = err or ("undefined variable '%s'"):format(core)
-        end
-        replacement = ""
-      end
-    end
-
-    parts[#parts + 1] = replacement
-    init = stop + 1
-  end
-  parts[#parts + 1] = text:sub(init)
-
-  if err then
-    return nil, err
-  end
-  return table.concat(parts)
+  local out, err = resolve_text(text, defs, opts, now_t, {})
+  return out, err
 end
 
 ---Take one `os.date("*t")` snapshot so every `$_now` reference in the

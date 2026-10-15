@@ -156,7 +156,8 @@ The picker backend is configurable (`list.picker`): `"snacks"`,
 back to `vim.ui.select`.
 
 Supported `.http` features: `###` request separators (with optional names),
-`#`/`//` comments, `@name = value` file variables, `@name <tag>` request tags,
+`#`/`//` comments, `@name = value` file variables (values may derive from
+other references), `@name <tag>` request tags,
 `$name` substitution in URL/headers/body (concatenates inside quoted strings),
 request headers and raw bodies (RFC 9112 message shape).
 
@@ -222,6 +223,26 @@ keeps the `.json` suffix.
 Because the prefix is reserved, defining a variable whose name starts with
 `_` (a file-level `@_name = value` or an environment variable in
 `rest-env.json`) raises a warning and stops the request.
+
+Definition values are references too (derived variables): other
+definitions, environment values, previous responses and `$_` globals are
+all legal inside a `@name = value`, and they resolve when the request
+runs, so every `$_now` in one request (including derived ones) is the
+same instant:
+
+```http
+@host = https://api.example.com
+@utctime = $_now.hour.add(4)
+@path = $host/time
+
+GET $path
+X-Utc-Time: $utctime
+```
+
+Definitions may reference each other in any order; errors inside a value
+are reported as `definition '<name>': <error>`, and one that ends up
+referencing itself (directly or through others) is reported as
+`circular definition: <path>`.
 
 ## Chaining requests
 

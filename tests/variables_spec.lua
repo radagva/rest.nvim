@@ -670,4 +670,133 @@ describe("variables", function()
       assert.matches("'$_' prefix is reserved", err)
     end)
   end)
+
+  describe("derived definitions", function()
+    local now = { year = 2026, month = 10, day = 15, hour = 14, min = 30, sec = 5 }
+    local opts = { now = now }
+
+    it("resolves references inside definition values", function()
+      local defs = { utctime = "$_now.hour.add(4)" }
+      assert.equals("2026-10-15T18:30:05", variables.resolve("$utctime", defs, opts))
+      assert.equals("at 2026-10-15T18:30:05!", variables.resolve("at $utctime!", defs, opts))
+      assert.equals("2026-10-15T18:30:05.", variables.resolve("$utctime.", defs, opts))
+      assert.equals(
+        "Bearer tok-123",
+        variables.resolve("$auth", { auth = "Bearer $token", token = "tok-123" }, opts)
+      )
+    end)
+
+    it("shares one clock snapshot between text and definitions", function()
+      assert.equals("2026-10-15T14:30:05", variables.resolve("$ts", { ts = "$_now" }, opts))
+      local real = assert(variables.resolve("$ts|$_now", { ts = "$_now" }))
+      local from_def, from_text = real:match("^(.*)|(.*)$")
+      assert.equals(from_def, from_text)
+    end)
+
+    it("chains definitions through other definitions", function()
+      local defs = {
+        host = "https://api.example.com",
+        base = "$host/v1",
+        users = "$base/users",
+      }
+      assert.equals("https://api.example.com/v1/users", variables.resolve("$users", defs, opts))
+    end)
+
+    it("derives from response references", function()
+      local o = {
+        responses = {
+          login = {
+            status = 200,
+            reason = "OK",
+            version = "HTTP/2",
+            url = "https://example.com/login",
+            headers = {},
+            body = '{"token":"tok-123"}',
+          },
+        },
+        decode = function()
+          return { token = "tok-123" }
+        end,
+        encode = function()
+          return '{"token":"tok-123"}'
+        end,
+      }
+      local defs = { token = "$login.response.body.token" }
+      assert.equals("Bearer tok-123", variables.resolve("Bearer $token", defs, o))
+    end)
+
+    it("stringifies non-string definitions", function()
+      assert.equals("8080", variables.resolve("$port", { port = 8080 }))
+      assert.equals("true", variables.resolve("$flag", { flag = true }))
+      assert.equals("v1/8080", variables.resolve("$name/$port", { name = "v1", port = 8080 }))
+      assert.equals("8080!", variables.resolve("$port!", { port = 8080 }))
+    end)
+
+    it("keeps escapes and literals inside definition values", function()
+      assert.equals("$literal", variables.resolve("$v", { v = "$$literal" }))
+      assert.equals("$99.99", variables.resolve("$v", { v = "$99.99" }))
+      assert.equals("plain", variables.resolve("$v", { v = "plain" }))
+    end)
+
+    it("leaves unused definitions unresolved", function()
+      assert.equals("ok", variables.resolve("ok", { broken = "$nope" }))
+      assert.equals("ok", variables.resolve("ok", { self = "$self" }))
+    end)
+
+    it("errors when a broken definition is used", function()
+      local out, err = variables.resolve("$broken", { broken = "$nope" })
+      assert.is_nil(out)
+      assert.matches("definition 'broken': undefined variable 'nope'", err, nil, true)
+    end)
+
+    it("propagates nested definition errors with the path", function()
+      local out, err = variables.resolve("$x", { x = "$y", y = "$nope" })
+      assert.is_nil(out)
+      assert.matches("definition 'x': definition 'y': undefined variable 'nope'", err, nil, true)
+    end)
+
+    it("errors on circular definitions", function()
+      local out, err = variables.resolve("$a", { a = "$b", b = "$a" })
+      assert.is_nil(out)
+      assert.matches("circular definition: a -> b -> a", err, nil, true)
+
+      out, err = variables.resolve("$self", { self = "$self" })
+      assert.is_nil(out)
+      assert.matches("circular definition: self -> self", err, nil, true)
+
+      out, err = variables.resolve("$c", { a = "$b", b = "$a", c = "$a" })
+      assert.is_nil(out)
+      assert.matches("circular definition: c -> a -> b -> a", err, nil, true)
+    end)
+
+    it("resolves derived definitions through resolve_request", function()
+      local request = {
+        method = "GET",
+        url = "https://example.com/?ts=$utctime",
+        headers = { { name = "X-Utc", value = "$utctime" } },
+        body = '{"ts": "$utctime"}',
+      }
+      local defs = { utctime = "$_now.addHours(1)" }
+      local resolved = assert(variables.resolve_request(request, defs, { now = now }))
+      assert.equals("https://example.com/?ts=2026-10-15T15:30:05", resolved.url)
+      assert.equals("2026-10-15T15:30:05", resolved.headers[1].value)
+      assert.equals('{"ts": "2026-10-15T15:30:05"}', resolved.body)
+    end)
+
+    it("reports definition errors in resolve_request context", function()
+      local request = {
+        method = "GET",
+        url = "https://example.com",
+        headers = { { name = "X-T", value = "$broken" } },
+      }
+      local out, err = variables.resolve_request(request, { broken = "$_now.hous.add(4)" })
+      assert.is_nil(out)
+      assert.matches(
+        "header 'X-T': definition 'broken': unknown '$_now' field 'hous'",
+        err,
+        nil,
+        true
+      )
+    end)
+  end)
 end)
