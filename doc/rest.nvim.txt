@@ -150,6 +150,29 @@ $_now		Moment the request is resolved, as a local ISO 8601
 		03:30; on Jan 31, `$_now.month.add(1)` clamps to Feb 28
 		(29 in a leap year).
 
+		The same shifts exist as methods directly on $_now,
+		chainable in written order. Each link applies to the
+		result of the previous one, and a chain may end with a
+		field access: >
+  POST https://api.example.com/sessions
+  Content-Type: application/json
+
+  {"expiresAt": "$_now.addHours(4).addMinutes(2)",
+   "remindOn": "$_now.addDays(7).day"}
+<
+		  addHours(n) / subHours(n)	shift hours
+		  addMinutes(n) / subMinutes(n)	shift minutes
+		  addSeconds(n) / subSeconds(n)	shift seconds
+		  addDays(n) / subDays(n)	shift days
+		  addMonths(n) / subMonths(n)	shift months
+		  addYears(n) / subYears(n)	shift years
+
+		Chains are order-sensitive: from Jan 31,
+		`$_now.addMonths(1).addMonths(1)` lands on Mar 28, while
+		`$_now.addMonths(2)` lands on Mar 31. Text after a chain
+		that is not part of it stays literal, so
+		`$_now.addHours(1).json` keeps the `.json` suffix.
+
 ==============================================================================
 6. COOKIES						*rest.nvim-cookies*
 

@@ -480,6 +480,168 @@ describe("variables", function()
     end)
   end)
 
+  describe("$_now shift methods", function()
+    local now = { year = 2026, month = 10, day = 15, hour = 14, min = 30, sec = 5 }
+    local opts = { now = now }
+
+    it("shifts each unit with add/sub methods", function()
+      assert.equals("2026-10-15T18:30:05", variables.resolve("$_now.addHours(4)", {}, opts))
+      assert.equals("2026-10-15T07:30:05", variables.resolve("$_now.subHours(7)", {}, opts))
+      assert.equals("2026-10-15T14:32:05", variables.resolve("$_now.addMinutes(2)", {}, opts))
+      assert.equals("2026-10-15T14:28:05", variables.resolve("$_now.subMinutes(2)", {}, opts))
+      assert.equals("2026-10-15T14:31:05", variables.resolve("$_now.addSeconds(60)", {}, opts))
+      assert.equals("2026-10-15T14:29:05", variables.resolve("$_now.subSeconds(60)", {}, opts))
+      assert.equals("2026-10-16T14:30:05", variables.resolve("$_now.addDays(1)", {}, opts))
+      assert.equals("2026-10-14T14:30:05", variables.resolve("$_now.subDays(1)", {}, opts))
+      assert.equals("2026-11-15T14:30:05", variables.resolve("$_now.addMonths(1)", {}, opts))
+      assert.equals("2025-11-15T14:30:05", variables.resolve("$_now.subMonths(11)", {}, opts))
+      assert.equals("2027-10-15T14:30:05", variables.resolve("$_now.addYears(1)", {}, opts))
+      assert.equals("2025-10-15T14:30:05", variables.resolve("$_now.subYears(1)", {}, opts))
+    end)
+
+    it("rolls over across boundaries", function()
+      local o = { now = { year = 2026, month = 12, day = 31, hour = 23, min = 59, sec = 59 } }
+      assert.equals("2027-01-01T00:00:00", variables.resolve("$_now.addSeconds(1)", {}, o))
+      assert.equals("2027-01-01T00:00:59", variables.resolve("$_now.addMinutes(1)", {}, o))
+      assert.equals("2027-01-01T23:59:59", variables.resolve("$_now.addDays(1)", {}, o))
+      assert.equals("2027-01-31T23:59:59", variables.resolve("$_now.addMonths(1)", {}, o))
+      assert.equals("2027-12-31T23:59:59", variables.resolve("$_now.addYears(1)", {}, o))
+      assert.equals("2026-12-31T23:59:58", variables.resolve("$_now.subSeconds(1)", {}, o))
+    end)
+
+    it("chains methods in written order", function()
+      assert.equals(
+        "2026-10-15T18:32:05",
+        variables.resolve("$_now.addHours(4).addMinutes(2)", {}, opts)
+      )
+      assert.equals(
+        "2026-10-17T15:32:06",
+        variables.resolve("$_now.addDays(2).addHours(1).addMinutes(2).addSeconds(1)", {}, opts)
+      )
+      assert.equals(
+        "2026-10-14T13:28:04",
+        variables.resolve("$_now.subDays(1).subHours(1).subMinutes(2).subSeconds(1)", {}, opts)
+      )
+      assert.equals(
+        "2026-10-16T09:30:05",
+        variables.resolve("$_now.addDays(1).subHours(5)", {}, opts)
+      )
+    end)
+
+    it("applies each link to the result of the previous one", function()
+      local jan = { now = { year = 2026, month = 1, day = 31, hour = 12, min = 0, sec = 0 } }
+      assert.equals(
+        "2026-03-28T12:00:00",
+        variables.resolve("$_now.addMonths(1).addMonths(1)", {}, jan)
+      )
+      assert.equals("2026-03-31T12:00:00", variables.resolve("$_now.addMonths(2)", {}, jan))
+      assert.equals(
+        "2026-03-01T12:00:00",
+        variables.resolve("$_now.addDays(1).addMonths(1)", {}, jan)
+      )
+    end)
+
+    it("reads a field off a shifted chain", function()
+      assert.equals("18", variables.resolve("$_now.addHours(4).hour", {}, opts))
+      assert.equals("16", variables.resolve("$_now.addMinutes(90).hour", {}, opts))
+      assert.equals("00", variables.resolve("$_now.addMinutes(90).minute", {}, opts))
+      assert.equals("16", variables.resolve("$_now.addDays(1).day", {}, opts))
+      assert.equals("11", variables.resolve("$_now.addMonths(1).month", {}, opts))
+      assert.equals("06", variables.resolve("$_now.addSeconds(1).second", {}, opts))
+      assert.equals("2027", variables.resolve("$_now.addYears(1).year", {}, opts))
+    end)
+
+    it("chains after the field.add form", function()
+      assert.equals(
+        "2026-10-15T17:00:05",
+        variables.resolve("$_now.hour.add(2).addMinutes(30)", {}, opts)
+      )
+      assert.equals("30", variables.resolve("$_now.hour.add(2).minute", {}, opts))
+    end)
+
+    it("leaves text after a chain as literal", function()
+      assert.equals(
+        "2026-10-15T18:30:05.json",
+        variables.resolve("$_now.addHours(4).json", {}, opts)
+      )
+      assert.equals("2026-10-15T18:30:05!", variables.resolve("$_now.addHours(4)!", {}, opts))
+      assert.equals("2026-10-15T18:30:05.5", variables.resolve("$_now.addHours(4).5", {}, opts))
+      assert.equals("2026-10-15T18:30:05.", variables.resolve("$_now.addHours(4).", {}, opts))
+      assert.equals(
+        "at 2026-10-15T18:30:05 and example.com",
+        variables.resolve("at $_now.addHours(4) and $host", { host = "example.com" }, opts)
+      )
+    end)
+
+    it("keeps the $$ escape working with methods", function()
+      assert.equals("$_now.addHours(4)", variables.resolve("$$_now.addHours(4)", {}))
+    end)
+
+    it("errors on malformed method calls", function()
+      local cases = {
+        "$_now.addHours",
+        "$_now.addHours(4).addMinutes",
+        "$_now.addHours()",
+        "$_now.addHours(x)",
+        "$_now.addHours(1.5)",
+        "$_now.addHours (4)",
+        "$_now.addHours(4).addMinutes(x)",
+        "$_now.addHours(4).addMinutes (2)",
+        "$_now.addHours(4).addDays",
+        "$_now.addHours(4).hour.foo",
+        "$_now.addHours(4).hour.add(1)",
+      }
+      for _, case in ipairs(cases) do
+        local out, err = variables.resolve(case, {}, opts)
+        assert(out == nil, ("%s: expected an error, got %q"):format(case, tostring(out)))
+        assert(
+          type(err) == "string" and err:find("$_now", 1, true),
+          ("%s: unexpected error %q"):format(case, tostring(err))
+        )
+      end
+    end)
+
+    it("reports the whole chain in error messages", function()
+      local _, err = variables.resolve("$_now.addHours(4).hour.foo", {}, opts)
+      assert.matches("'$_now.addHours(4).hour'", err, nil, true)
+      _, err = variables.resolve("$_now.addHours(4).addMinutes(x)", {}, opts)
+      assert.matches("'$_now.addHours(4).addMinutes(x)'", err, nil, true)
+      _, err = variables.resolve("$_now.hour.add(2).addDays", {}, opts)
+      assert.matches("'$_now.hour.add(2).addDays'", err, nil, true)
+    end)
+
+    it("errors on unknown methods", function()
+      local out, err = variables.resolve("$_now.addHour(4)", {}, opts)
+      assert.is_nil(out)
+      assert.matches("unknown '$_now' method 'addHour'", err)
+
+      out, err = variables.resolve("$_now.subHour(1)", {}, opts)
+      assert.is_nil(out)
+      assert.matches("unknown '$_now' method 'subHour'", err)
+
+      out, err = variables.resolve("$_now.addHours(4).addDay(1)", {}, opts)
+      assert.is_nil(out)
+      assert.matches("unknown '$_now' method 'addDay'", err)
+
+      out, err = variables.resolve("$_now.addHours(4).add", {}, opts)
+      assert.is_nil(out)
+      assert.matches("unknown '$_now' method 'add'", err)
+    end)
+
+    it("shares one snapshot across url, headers and body", function()
+      local request = {
+        method = "POST",
+        url = "https://example.com/?ts=$_now.addHours(1)",
+        headers = { { name = "X-Expires", value = "$_now.addHours(1)" } },
+        body = '{"expiresAt": "$_now.addHours(1)"}',
+      }
+      local resolved = assert(variables.resolve_request(request, {}, { now = now }))
+      assert.equals("https://example.com/?ts=2026-10-15T15:30:05", resolved.url)
+      assert.equals("2026-10-15T15:30:05", resolved.headers[1].value)
+      assert.equals('{"expiresAt": "2026-10-15T15:30:05"}', resolved.body)
+    end)
+  end)
+
   describe("reserved $_ definitions", function()
     it("rejects definitions prefixed with _", function()
       local out, err = variables.resolve("$x", { _now = "nope", x = "1" })

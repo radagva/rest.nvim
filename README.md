@@ -194,6 +194,31 @@ Content-Type: application/json
 `$_now.hour.add(4)` at 23:30 rolls into the next day at 03:30, and
 `$_now.month.add(1)` on Jan 31 clamps to Feb 28 (29 in a leap year).
 
+The same shifts exist as methods directly on `$_now`, chainable in written
+order. Each link applies to the result of the previous one, and a chain may
+end with a field access:
+
+| Method                      | Shifts  |
+| --------------------------- | ------- |
+| `addHours(n)` / `subHours(n)`     | hours   |
+| `addMinutes(n)` / `subMinutes(n)` | minutes |
+| `addSeconds(n)` / `subSeconds(n)` | seconds |
+| `addDays(n)` / `subDays(n)`       | days    |
+| `addMonths(n)` / `subMonths(n)`   | months  |
+| `addYears(n)` / `subYears(n)`     | years   |
+
+```http
+POST https://api.example.com/sessions
+Content-Type: application/json
+
+{"issuedAt": "$_now", "expiresAt": "$_now.addHours(4).addMinutes(2)", "remindOn": "$_now.addDays(7).day"}
+```
+
+Chains are order-sensitive: from Jan 31, `$_now.addMonths(1).addMonths(1)`
+lands on Mar 28, while `$_now.addMonths(2)` lands on Mar 31. Text after a
+chain that is not part of it stays literal, so `$_now.addHours(1).json`
+keeps the `.json` suffix.
+
 Because the prefix is reserved, defining a variable whose name starts with
 `_` (a file-level `@_name = value` or an environment variable in
 `rest-env.json`) raises a warning and stops the request.

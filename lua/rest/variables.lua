@@ -180,7 +180,27 @@ local FIELD_FMT = {
   second = "%02d",
 }
 
-local NOW_USAGE = "expected $_now, $_now.<field>, $_now.<field>.add(<n>) or $_now.<field>.sub(<n>)"
+---Shift methods on `$_now`: method name -> { field, op }.
+local METHODS = {
+  addHours = { "hour", "add" },
+  subHours = { "hour", "sub" },
+  addMinutes = { "minute", "add" },
+  subMinutes = { "minute", "sub" },
+  addSeconds = { "second", "add" },
+  subSeconds = { "second", "sub" },
+  addDays = { "day", "add" },
+  subDays = { "day", "sub" },
+  addMonths = { "month", "add" },
+  subMonths = { "month", "sub" },
+  addYears = { "year", "add" },
+  subYears = { "year", "sub" },
+}
+
+local METHOD_NAMES = "addHours, subHours, addMinutes, subMinutes, addSeconds, subSeconds, "
+  .. "addDays, subDays, addMonths, subMonths, addYears, subYears"
+
+local NOW_USAGE = "expected $_now, $_now.<field>, $_now.<field>.add(<n>), "
+  .. "$_now.<field>.sub(<n>) or a shift method such as $_now.addHours(<n>)"
 
 local MDAYS = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
 
@@ -254,10 +274,9 @@ local function shift_months(t, n)
   end
 end
 
----Apply `.add(n)` / `.sub(n)` on `field` of the snapshot `now_t` and
----return the full normalized timestamp.
-local function shift_time(now_t, field, op, amount)
-  local t = copy_time(now_t)
+---Apply `.add(n)` / `.sub(n)` on `field` of `t` in place (t is already a
+---private copy); the clock and calendar are re-normalized after the shift.
+local function apply_shift(t, field, op, amount)
   local delta = op == "add" and amount or -amount
   if field == "second" then
     t.sec = t.sec + delta
@@ -280,7 +299,6 @@ local function shift_time(now_t, field, op, amount)
       t.day = last
     end
   end
-  return iso(t)
 end
 
 local function now_reference_error(expr)
@@ -293,48 +311,14 @@ local function unknown_field_error(field)
   )
 end
 
----Resolve a `$_now` reference: `core` is the name before the balanced
----argument group, `call` that group (e.g. `"(4)"`) or nil, `now_t` the
----`os.date("*t")` snapshot. Returns the value, or nil, err.
-local function resolve_global(core, call, now_t)
-  local expr = "$" .. core .. (call or "")
-  local rest = core:match("^_now%.(.*)$")
+local function unknown_method_error(method)
+  return ("unknown '$_now' method '%s' (expected one of %s)"):format(method, METHOD_NAMES)
+end
 
-  if not rest then
-    if call then
-      return nil, now_reference_error(expr)
-    end
-    return iso(now_t)
-  end
-
-  local field, op = rest:match("^(%a+)%.(%a+)$")
-  if field and (op == "add" or op == "sub") then
-    if not FIELD_KEY[field] then
-      return nil, unknown_field_error(field)
-    end
-    local amount
-    if call then
-      local digits = call:match("^%(%s*(-?%d+)%s*%)$")
-      amount = digits and tonumber(digits)
-    end
-    if not amount then
-      return nil, now_reference_error(expr)
-    end
-    return shift_time(now_t, field, op, amount)
-  end
-
-  field = rest:match("^(%a+)$")
-  if field then
-    if not FIELD_KEY[field] then
-      return nil, unknown_field_error(field)
-    end
-    if call then
-      return nil, now_reference_error(expr)
-    end
-    return string.format(FIELD_FMT[field], now_t[FIELD_KEY[field]])
-  end
-
-  return nil, now_reference_error(expr)
+---Parse `(<n>)` call arguments; nil when malformed.
+local function parse_amount(call)
+  local digits = call and call:match("^%(%s*(-?%d+)%s*%)$")
+  return digits and tonumber(digits)
 end
 
 ---Index of the balanced `(...)` group starting at `pos`, or nil.
@@ -355,6 +339,114 @@ local function match_parens(text, pos)
     end
   end
   return nil
+end
+
+---Consume a `(<n>)` argument group at `pos` and apply the shift to `t`.
+---Returns the position after the group, or nil, err (`expr` names the
+---reference in error messages).
+local function consume_shift(text, pos, expr, t, field, op)
+  local pe = match_parens(text, pos)
+  if not pe then
+    return nil, now_reference_error(expr)
+  end
+  local call = text:sub(pos, pe)
+  local amount = parse_amount(call)
+  if not amount then
+    return nil, now_reference_error(expr .. call)
+  end
+  apply_shift(t, field, op, amount)
+  return pe + 1
+end
+
+---Resolve a `$_now` reference: `core` is the matched name (`_now`,
+---`_now.hour`, `_now.addHours`, ...) and `e` its last index in `text`.
+---Shift methods and `<field>.add(<n>)` / `.sub(<n>)` shifts are chainable:
+---`.method(<n>)` groups that follow in `text` are consumed in written
+---order, and a chain may end with one field access (`...addDays(1).day`).
+---Text after the reference that is not part of it stays literal
+---(`$_now.addHours(1).json`). Returns the value, an error, and the index
+---of the last consumed character.
+local function resolve_global(core, e, text, now_t)
+  local expr = "$" .. core
+  local rest = core:match("^_now%.(.*)$")
+  local pos = e + 1
+
+  if not rest then
+    local pe = match_parens(text, pos)
+    if pe then
+      return nil, now_reference_error(expr .. text:sub(pos, pe)), nil
+    end
+    return iso(now_t), nil, e
+  end
+
+  local t = copy_time(now_t)
+  local method = METHODS[rest]
+  if method then
+    local newpos, merr = consume_shift(text, pos, expr, t, method[1], method[2])
+    if not newpos then
+      return nil, merr, nil
+    end
+    expr = expr .. text:sub(pos, newpos - 1)
+    pos = newpos
+  else
+    local field, op = rest:match("^(%a+)%.(%a+)$")
+    if field and (op == "add" or op == "sub") then
+      if not FIELD_KEY[field] then
+        return nil, unknown_field_error(field), nil
+      end
+      local newpos, merr = consume_shift(text, pos, expr, t, field, op)
+      if not newpos then
+        return nil, merr, nil
+      end
+      expr = expr .. text:sub(pos, newpos - 1)
+      pos = newpos
+    elseif rest:match("^add") or rest:match("^sub") then
+      return nil, unknown_method_error(rest), nil
+    else
+      local fld = rest:match("^(%a+)$")
+      if not fld then
+        return nil, now_reference_error(expr), nil
+      end
+      if not FIELD_KEY[fld] then
+        return nil, unknown_field_error(fld), nil
+      end
+      local pe = match_parens(text, pos)
+      if pe then
+        return nil, now_reference_error(expr .. text:sub(pos, pe)), nil
+      end
+      return string.format(FIELD_FMT[fld], now_t[FIELD_KEY[fld]]), nil, e
+    end
+  end
+
+  -- chained shift methods, then an optional field access
+  while text:sub(pos, pos) == "." do
+    local seg = text:match("^[%w_]+", pos + 1)
+    if not seg then
+      break
+    end
+    local m = METHODS[seg]
+    if m then
+      local call = pos + 1 + #seg
+      local head = expr .. "." .. seg
+      local newpos, merr = consume_shift(text, call, head, t, m[1], m[2])
+      if not newpos then
+        return nil, merr, nil
+      end
+      expr = head .. text:sub(call, newpos - 1)
+      pos = newpos
+    elseif FIELD_KEY[seg] then
+      local after = pos + 1 + #seg
+      if text:sub(after, after) == "." and text:sub(after + 1, after + 1):match("[%a_]") then
+        return nil, now_reference_error(expr .. "." .. seg), nil
+      end
+      return string.format(FIELD_FMT[seg], t[FIELD_KEY[seg]]), nil, after - 1
+    elseif seg:match("^add") or seg:match("^sub") then
+      return nil, unknown_method_error(seg), nil
+    else
+      break
+    end
+  end
+  return iso(t), nil, pos - 1
 end
 
 ---Reject definitions using the reserved `$_` prefix (plugin globals).
@@ -381,7 +473,11 @@ end
 ---`opts.now` snapshot (an `os.date("*t")` table, defaulting to the current
 ---time) as a local ISO 8601 timestamp, `$_now.<field>` a zero-padded field,
 ---and `$_now.<field>.add(<n>)` / `.sub(<n>)` the full timestamp after
----calendar normalization. Definitions must not use the `$_` prefix; see
+---calendar normalization. The same shifts exist as chainable methods on
+---`$_now` itself (`$_now.addHours(<n>)`, `subHours`, `add/subMinutes`,
+---`add/subSeconds`, `add/subDays`, `add/subMonths`, `add/subYears`): links
+---apply in written order and a chain may end with a field access
+---(`$_now.addDays(1).day`). Definitions must not use the `$_` prefix; see
 ---`check_defs`.
 ---
 ---Returns the resolved string, or `nil, err`.
@@ -415,17 +511,13 @@ function M.resolve(text, defs, opts)
     else
       local core, dots = name:match("^(.-)(%.*)$")
       if GLOBALS[core:match("^[^%.]+")] then
-        local pe = match_parens(text, e + 1)
-        local call = pe and text:sub(e + 1, pe) or nil
-        local value, gerr = resolve_global(core, call, now_t)
+        local value, gerr, stop2 = resolve_global(core, e, text, now_t)
         if not value then
           err = err or gerr
           replacement = ""
         else
           replacement = value .. dots
-          if call then
-            stop = pe
-          end
+          stop = stop2
         end
       elseif defs[core] ~= nil then
         replacement = defs[core] .. dots
